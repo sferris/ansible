@@ -1,0 +1,21 @@
+---
+namespace: wtferris
+name: oracle
+version: 1.0.0
+readme: README.md
+authors:
+  - wtferris
+description: Discover Oracle software installations and runtime resources.
+license:
+  - GPL-3.0-or-later
+tags:
+  - oracle
+  - database
+  - infrastructure
+  - discovery
+repository: https://github.com/wtferris/ansible-collection-oracle
+build_ignore:
+  - .git
+  - .gitignore
+  - .pytest_cache
+  - tests

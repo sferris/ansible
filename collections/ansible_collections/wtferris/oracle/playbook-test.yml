@@ -1,0 +1,14 @@
+---
+- name: Discover Oracle Installation
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Discover Oracle installation
+      wtferris.oracle.discovery:
+      register: oracle
+
+    - name: Display Oracle discovery results
+      debug:
+        var: oracle
