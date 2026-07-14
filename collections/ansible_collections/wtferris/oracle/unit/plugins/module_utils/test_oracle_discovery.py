@@ -11,6 +11,7 @@ from plugins.module_utils.oracle_discovery import (
     OracleDiscovery,
     crsctl_get_hostname,
     crsctl_stat_resources,
+    normalize_oracle_datetime,
     parse_comps_xml,
     parse_crsctl_sections,
     parse_environment_assignments,
@@ -42,7 +43,7 @@ class ParserTests(unittest.TestCase):
                 comps,
                 """<INVENTORY xmlns="urn:oracle"><PRD_LIST><TL_LIST>
                 <COMP NAME="Oracle Database" VER="19.26.0.0.0"
-                  BUILD_TIME="2025-01-21" INSTALL_TIME="2025-02-03"/>
+                  BUILD_TIME="2025-01-21_02-03-18PM" INSTALL_TIME="2025-02-03"/>
                 </TL_LIST></PRD_LIST></INVENTORY>""",
             )
 
@@ -53,8 +54,15 @@ class ParserTests(unittest.TestCase):
             self.assertEqual(homes[1]["software_home"], "/u01/oracle/home")
             self.assertEqual(component["software_type"], "Oracle Database")
             self.assertEqual(component["software_version"], "19.26.0.0.0")
-            self.assertEqual(component["software_build"], "2025-01-21")
+            self.assertEqual(component["software_build"], "2025-01-21_02-03-18PM")
+            self.assertEqual(component["software_build_date"], "2025-01-21 14:03:18")
             self.assertEqual(component["software_installed"], "2025-02-03")
+            self.assertEqual(component["software_installed_date"], "2025-02-03 00:00:00")
+
+    def test_oracle_datetime_normalization_rejects_unknown_formats(self):
+        self.assertEqual(normalize_oracle_datetime("2025-01-21_14-03-18"), "2025-01-21 14:03:18")
+        self.assertEqual(normalize_oracle_datetime("not a timestamp"), "")
+        self.assertEqual(normalize_oracle_datetime(""), "")
 
     def test_oratab_ignores_comments_and_normalizes_homes(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -17,7 +17,7 @@ The discovery module combines information from:
 - `<grid_home>/bin/crsctl get hostname`
 - `<grid_home>/bin/crsctl stat res -f`
 
-The module always reports `changed: false` and supports check mode.
+The module always reports `changed: false` and supports check mode. Oracle's original `software_build` and `software_installed` values are retained, while `software_build_date` and `software_installed_date` provide normalized `YYYY-MM-DD HH:MM:SS` values. Convert the normalized values with Ansible's `to_datetime` filter when performing date comparisons.
 
 ```yaml
 - name: Discover Oracle installation
@@ -26,6 +26,14 @@ The module always reports `changed: false` and supports check mode.
 
 - ansible.builtin.debug:
     var: oracle.instances
+
+- name: Identify homes installed before 2025
+  ansible.builtin.debug:
+    msg: "{{ item.value.software_home }}"
+  loop: "{{ oracle.software_homes | dict2items }}"
+  when:
+    - item.value.software_installed_date | length > 0
+    - item.value.software_installed_date | to_datetime < '2025-01-01 00:00:00' | to_datetime
 ```
 
 Custom software roots can be supplied when installations do not use the defaults:

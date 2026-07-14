@@ -112,6 +112,19 @@ software_homes:
   description: Software homes keyed by the lowercased home directory basename.
   returned: always
   type: dict
+  contains:
+    software_build:
+      description: Original C(BUILD_TIME) value from C(comps.xml).
+      type: str
+    software_build_date:
+      description: Build timestamp normalized as C(YYYY-MM-DD HH:MM:SS), or an empty string.
+      type: str
+    software_installed:
+      description: Original C(INSTALL_TIME) value from C(comps.xml).
+      type: str
+    software_installed_date:
+      description: Installation timestamp normalized as C(YYYY-MM-DD HH:MM:SS), or an empty string.
+      type: str
 instances:
   description: Database instances keyed by lowercased instance name.
   returned: always

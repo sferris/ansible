@@ -5,6 +5,7 @@
 from __future__ import absolute_import, division, print_function
 
 import glob
+from datetime import datetime
 import os
 import re
 import shlex
@@ -28,6 +29,31 @@ def normalize_path(path):
 
 def _local_name(tag):
     return tag.rsplit("}", 1)[-1]
+
+
+def normalize_oracle_datetime(value):
+    """Convert an Oracle inventory timestamp to an Ansible-friendly datetime string."""
+    value = (value or "").strip()
+    if not value:
+        return ""
+
+    # 2026.Mar.08 13:54:00 UTC
+    formats = (
+        "%Y.%b.%d %H:%M:%S %Z",
+        "%Y%m%d.%H%M%S",
+        "%Y-%m-%d_%I-%M-%S%p",
+        "%Y-%m-%d_%H-%M-%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d",
+    )
+    for timestamp_format in formats:
+        try:
+            parsed = datetime.strptime(value, timestamp_format)
+            return parsed.strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            continue
+    return ""
 
 
 def _new_instance(name=""):
@@ -147,11 +173,15 @@ def parse_comps_xml(path):
         return {}
 
     component = candidates[0]
+    software_build = component.attrib.get("BUILD_TIME", "").strip()
+    software_installed = component.attrib.get("INSTALL_TIME", "").strip()
     return {
         "software_type": component.attrib.get("NAME", "").strip(),
         "software_version": component.attrib.get("VER", "").strip(),
-        "software_build": component.attrib.get("BUILD_TIME", "").strip(),
-        "software_installed": component.attrib.get("INSTALL_TIME", "").strip(),
+        "software_build": software_build,
+        "software_build_date": normalize_oracle_datetime(software_build),
+        "software_installed": software_installed,
+        "software_installed_date": normalize_oracle_datetime(software_installed),
     }
 
 
@@ -331,7 +361,9 @@ class OracleDiscovery(object):
             "software_type": "",
             "software_version": "",
             "software_build": "",
+            "software_build_date": "",
             "software_installed": "",
+            "software_installed_date": "",
         })
         if homename:
             record["software_homename"] = homename
