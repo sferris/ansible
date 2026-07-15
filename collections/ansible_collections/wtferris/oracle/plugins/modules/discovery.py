@@ -5,6 +5,12 @@
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
+from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.wtferris.oracle.plugins.module_utils.oracle_discovery import (
+    DEFAULT_GRID_ROOTS,
+    DEFAULT_ORACLE_ROOTS,
+    OracleDiscovery,
+)
 
 __metaclass__ = type
 
@@ -78,6 +84,10 @@ grid_home:
   type: str
 grid_type:
   description: C(restart) or C(rac), as reported by C(ocr.loc).
+  returned: always
+  type: str
+grid_server:
+  description: Server name reported by C(crsctl get hostname).
   returned: always
   type: str
 asm_installed:
@@ -157,12 +167,7 @@ listener_others:
   type: dict
 """
 
-from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.wtferris.oracle.plugins.module_utils.oracle_discovery import (
-    DEFAULT_GRID_ROOTS,
-    DEFAULT_ORACLE_ROOTS,
-    OracleDiscovery,
-)
+
 
 
 def main():
@@ -193,4 +198,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

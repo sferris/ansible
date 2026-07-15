@@ -12,6 +12,7 @@ from plugins.module_utils.oracle_discovery import (
     crsctl_get_hostname,
     crsctl_stat_resources,
     normalize_oracle_datetime,
+    path_is_within,
     parse_comps_xml,
     parse_crsctl_sections,
     parse_environment_assignments,
@@ -63,6 +64,13 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(normalize_oracle_datetime("2025-01-21_14-03-18"), "2025-01-21 14:03:18")
         self.assertEqual(normalize_oracle_datetime("not a timestamp"), "")
         self.assertEqual(normalize_oracle_datetime(""), "")
+
+    def test_path_is_within_respects_path_boundaries(self):
+        self.assertTrue(path_is_within("/u01/grid", "/u01/grid"))
+        self.assertTrue(path_is_within("/u01/grid/19c", "/u01/grid"))
+        self.assertFalse(path_is_within("/u01/grid-old/19c", "/u01/grid"))
+        self.assertFalse(path_is_within("/u01", "/u01/grid"))
+        self.assertFalse(path_is_within("", "/u01/grid"))
 
     def test_oratab_ignores_comments_and_normalizes_homes(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -189,8 +197,10 @@ SPFILE=+DATA/spfileasm.ora
 
 NAME=ora.smf.db
 TYPE=ora.database.type
-HOSTING_MEMBERS=node01
-USR_ORA_INST_NAME=SMF01d_01
+HOSTING_MEMBERS=node01 node02
+USR_ORA_INST_NAME=
+USR_ORA_INST_NAME@SERVERNAME(node01)=SMF01d_01
+USR_ORA_INST_NAME@SERVERNAME(node02)=SMF02d_01
 ORACLE_HOME={db_home}
 PWFILE=+DATA/orapwsmf
 SPFILE=+DATA/spfilesmf.ora
@@ -232,6 +242,7 @@ ENDPOINTS=TCP:1621
             self.assertTrue(result["grid_running"])
             self.assertEqual(result["grid_home"], grid_home)
             self.assertEqual(result["grid_type"], "rac")
+            self.assertEqual(result["grid_server"], "node01")
 
             self.assertTrue(result["asm_installed"])
             self.assertTrue(result["asm_running"])
@@ -250,6 +261,7 @@ ENDPOINTS=TCP:1621
             self.assertEqual(instance["instance_name"], "SMF01d_01")
             self.assertEqual(instance["instance_variables"], {"patch": "foo bar", "home": "baz"})
             self.assertIn("oratab_only", result["instances"])
+            self.assertNotIn("smf02d_01", result["instances"])
             self.assertNotIn("remote", result["instances"])
 
             self.assertTrue(result["listener_running"])

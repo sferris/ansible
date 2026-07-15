@@ -27,6 +27,23 @@ def normalize_path(path):
     return os.path.normpath(os.path.abspath(os.path.expanduser(path.strip())))
 
 
+def path_is_within(path, root):
+    """Return whether path is root or one of its descendants."""
+    path = normalize_path(path)
+    root = normalize_path(root)
+    if not path or not root:
+        return False
+    try:
+        relative = os.path.relpath(path, root)
+    except ValueError:
+        return False
+    return relative == os.curdir or (
+        not os.path.isabs(relative)
+        and relative != os.pardir
+        and not relative.startswith(os.pardir + os.sep)
+    )
+
+
 def _local_name(tag):
     return tag.rsplit("}", 1)[-1]
 
@@ -89,6 +106,7 @@ def _new_result():
         "grid_running": False,
         "grid_home": "",
         "grid_type": "",
+        "grid_server": "",
         "asm_installed": False,
         "asm_running": False,
         "asm_instance": "",
@@ -339,14 +357,7 @@ class OracleDiscovery(object):
         return os.path.basename(normalize_path(path)).lower()
 
     def _is_grid_home(self, home):
-        normalized = normalize_path(home)
-        for root in self.grid_roots:
-            try:
-                if os.path.commonpath([normalized, root]) == root:
-                    return True
-            except ValueError:
-                continue
-        return False
+        return any(path_is_within(home, root) for root in self.grid_roots)
 
     def _add_software_home(self, home, homename=""):
         home = normalize_path(home)
@@ -518,8 +529,13 @@ class OracleDiscovery(object):
         elif local_only in ("false", "no", "n", "0"):
             self.result["grid_type"] = "rac"
 
-    def _merge_crs_instance(self, resource):
+    def _merge_crs_instance(self, resource, hostname=""):
         instance_name = resource.get("USR_ORA_INST_NAME", "").strip()
+        for parameter, value in resource.items():
+            match = re.match(r"^USR_ORA_INST_NAME@SERVERNAME\(([^)]+)\)$", parameter, re.IGNORECASE)
+            if match and match.group(1).lower() == hostname.lower():
+                instance_name = value.strip()
+                break
         if not instance_name:
             return
         key = instance_name.lower()
@@ -558,6 +574,7 @@ class OracleDiscovery(object):
         hostname = crsctl_get_hostname(
             self.result["grid_home"], timeout=self.crsctl_timeout, runner=self.crsctl_runner
         )
+        self.result["grid_server"] = hostname
         resources = crsctl_stat_resources(
             self.result["grid_home"], timeout=self.crsctl_timeout, runner=self.crsctl_runner
         )
@@ -575,7 +592,7 @@ class OracleDiscovery(object):
             elif resource_type == "ora.database.type":
                 members = [item for item in re.split(r"[,\s]+", resource.get("HOSTING_MEMBERS", "")) if item]
                 if hostname and any(member.lower() == hostname.lower() for member in members):
-                    self._merge_crs_instance(resource)
+                    self._merge_crs_instance(resource, hostname)
             elif resource_type == "ora.listener.type":
                 self._merge_crs_listener(resource)
 
