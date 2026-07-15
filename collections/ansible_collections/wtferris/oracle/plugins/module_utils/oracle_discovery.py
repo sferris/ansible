@@ -93,6 +93,7 @@ def _new_listener(name=""):
         "listener_running": False,
         "listener_name": name,
         "listener_home": "",
+        "listener_type": "",
         "listener_registered": False,
         "listener_standard_ports": [],
         "listener_ssl_ports": [],
@@ -119,6 +120,7 @@ def _new_result():
         "listener_name": listener["listener_name"],
         "listener_running": listener["listener_running"],
         "listener_home": listener["listener_home"],
+        "listener_type": listener["listener_type"],
         "listener_registered": listener["listener_registered"],
         "listener_standard_ports": listener["listener_standard_ports"],
         "listener_ssl_ports": listener["listener_ssl_ports"],
@@ -554,13 +556,14 @@ class OracleDiscovery(object):
             if value or field == "instance_variables":
                 instance[field] = value
 
-    def _merge_crs_listener(self, resource):
+    def _merge_crs_listener(self, resource, listener_type):
         match = re.match(r"^ora\.(.+)\.lsnr$", resource.get("NAME", ""), re.IGNORECASE)
         if not match:
             return
         listener_name = match.group(1)
         listener, is_default = self._get_listener(listener_name)
         listener["listener_name"] = listener_name
+        listener["listener_type"] = listener_type
         listener["listener_registered"] = True
         standard, ssl = parse_listener_endpoints(resource.get("ENDPOINTS", ""))
         listener["listener_standard_ports"] = standard
@@ -593,6 +596,15 @@ class OracleDiscovery(object):
                 members = [item for item in re.split(r"[,\s]+", resource.get("HOSTING_MEMBERS", "")) if item]
                 if hostname and any(member.lower() == hostname.lower() for member in members):
                     self._merge_crs_instance(resource, hostname)
-            elif resource_type == "ora.listener.type":
-                self._merge_crs_listener(resource)
+            elif resource_type in (
+                "ora.listener.type",
+                "ora.scan_listener.type",
+                "ora.asm_listener.type",
+            ):
+                listener_types = {
+                    "ora.listener.type": "database",
+                    "ora.asm_listener.type": "asm",
+                    "ora.scan_listener.type": "scan",
+                }
+                self._merge_crs_listener(resource, listener_types[resource_type])
 

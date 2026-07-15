@@ -147,6 +147,10 @@ listener_running:
   description: Whether the default listener process is running.
   returned: always
   type: bool
+listener_type:
+  description: CRS listener type, one of C(database), C(asm), or C(scan), or an empty string.
+  returned: always
+  type: str
 listener_registered:
   description: Whether the default listener is registered in CRS.
   returned: always
@@ -165,6 +169,10 @@ listener_others:
   description: Non-default listeners keyed by listener name.
   returned: always
   type: dict
+  contains:
+    listener_type:
+      description: CRS listener type, one of C(database), C(asm), or C(scan), or an empty string.
+      type: str
 """
 
 

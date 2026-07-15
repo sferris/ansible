@@ -221,6 +221,14 @@ ENDPOINTS=TCP:1521,1522 TCPS:5500
 NAME=ora.APP_LISTENER.lsnr
 TYPE=ora.listener.type
 ENDPOINTS=TCP:1621
+
+NAME=ora.ASMNET1LSNR_ASM.lsnr
+TYPE=ora.asm_listener.type
+ENDPOINTS=TCP:1525
+
+NAME=ora.LISTENER_SCAN1.lsnr
+TYPE=ora.scan_listener.type
+ENDPOINTS=TCP:1526
 """.format(db_home=db_home)
 
             def runner(command, **kwargs):
@@ -266,12 +274,16 @@ ENDPOINTS=TCP:1621
 
             self.assertTrue(result["listener_running"])
             self.assertTrue(result["listener_registered"])
+            self.assertEqual(result["listener_type"], "database")
             self.assertEqual(result["listener_standard_ports"], [1521, 1522])
             self.assertEqual(result["listener_ssl_ports"], [5500])
             other = result["listener_others"]["APP_LISTENER"]
             self.assertTrue(other["listener_running"])
             self.assertTrue(other["listener_registered"])
+            self.assertEqual(other["listener_type"], "database")
             self.assertEqual(other["listener_standard_ports"], [1621])
+            self.assertEqual(result["listener_others"]["ASMNET1LSNR_ASM"]["listener_type"], "asm")
+            self.assertEqual(result["listener_others"]["LISTENER_SCAN1"]["listener_type"], "scan")
 
 
 if __name__ == "__main__":
