@@ -531,15 +531,52 @@ class OracleDiscovery(object):
         elif local_only in ("false", "no", "n", "0"):
             self.result["grid_type"] = "rac"
 
-    def _merge_crs_instance(self, resource, hostname=""):
-        instance_name = resource.get("USR_ORA_INST_NAME", "").strip()
-        for parameter, value in resource.items():
-            match = re.match(r"^USR_ORA_INST_NAME@SERVERNAME\(([^)]+)\)$", parameter, re.IGNORECASE)
-            if match and match.group(1).lower() == hostname.lower():
-                instance_name = value.strip()
-                break
+    def _merge_asm_instance(self, resource):
+        hostname = self.result.get("grid_server")
+
+        self.result["asm_installed"] = True
+        self.result["asm_registered"] = True
+
+        asm_instance_count = int(resource.get("INSTANCE_COUNT"))
+        self.result["asm_instance_count"] = asm_instance_count
+
+        if asm_instance_count > 1:
+            for key, value in resource.items():
+                # Pattern: GEN_USR_ORA_INST_NAME@SERVERNAME(<name>)=value
+                pattern = r'GEN_USR_ORA_INST_NAME@SERVERNAME\(([^)]+)\)=.*'
+                match = re.search(pattern, hostname, re.IGNORECASE)
+
+                if match and match.group(1) == search_name:
+                    self.result["asm_instance"] = value
+
+        elif asm_instance_count <= 1:
+            self.result["asm_instance"] = resource.get("USR_ORA_INST_NAME")
+
+        if not self.result["asm_home"]:
+            self.result["asm_home"] = self.result["grid_home"]
+
+        self.result["asm_pwfile"] = resource.get("PWFILE", "")
+        self.result["asm_spfile"] = resource.get("SPFILE", "")
+
+    def _merge_crs_instance(self, resource):
+        hostname = self.result.get("grid_server")
+
+        instance_count = int(resource.get("INSTANCE_COUNT"))
+        if instance_count > 1:
+            for key, value in resource.items():
+                # Pattern: GEN_USR_ORA_INST_NAME@SERVERNAME(<name>)=value
+                pattern = r'GEN_USR_ORA_INST_NAME@SERVERNAME\(([^)]+)\)=.*'
+                match = re.search(pattern, hostname, re.IGNORECASE)
+
+                if match and match.group(1) == search_name:
+                    instance_name = value
+
+        elif instance_count <= 1:
+            instance_name = resource.get("USR_ORA_INST_NAME")
+
         if not instance_name:
             return
+
         key = instance_name.lower()
         instance = self.result["instances"].setdefault(key, _new_instance(instance_name))
         instance["instance_registered"] = True
@@ -548,26 +585,37 @@ class OracleDiscovery(object):
             "instance_home": normalize_path(resource.get("ORACLE_HOME", "")),
             "instance_pwfile": resource.get("PWFILE", ""),
             "instance_spfile": resource.get("SPFILE", ""),
+            "instance_type": resource.get("DATABASE_TYPE", ""),
             "instance_management_policy": resource.get("MANAGEMENT_POLICY", ""),
             "instance_audit_dest": resource.get("GEN_AUDIT_FILE_DEST", ""),
             "instance_variables": parse_environment_assignments(resource.get("USR_ORA_ENV", "")),
+            "instance_server": hostname,
         }
         for field, value in values.items():
             if value or field == "instance_variables":
                 instance[field] = value
 
-    def _merge_crs_listener(self, resource, listener_type):
+    def _merge_crs_listener(self, resource):
         match = re.match(r"^ora\.(.+)\.lsnr$", resource.get("NAME", ""), re.IGNORECASE)
         if not match:
             return
+
+        listener_types = {
+            "ora.listener.type": "database",
+            "ora.asm_listener.type": "asm",
+            "ora.scan_listener.type": "scan",
+        }
+
         listener_name = match.group(1)
         listener, is_default = self._get_listener(listener_name)
         listener["listener_name"] = listener_name
-        listener["listener_type"] = listener_type
         listener["listener_registered"] = True
+        listener["listener_type"] = listener_types[resource.get("TYPE")]
+
         standard, ssl = parse_listener_endpoints(resource.get("ENDPOINTS", ""))
         listener["listener_standard_ports"] = standard
         listener["listener_ssl_ports"] = ssl
+
         if is_default:
             self._set_default_listener(listener)
 
@@ -578,33 +626,16 @@ class OracleDiscovery(object):
             self.result["grid_home"], timeout=self.crsctl_timeout, runner=self.crsctl_runner
         )
         self.result["grid_server"] = hostname
+
         resources = crsctl_stat_resources(
             self.result["grid_home"], timeout=self.crsctl_timeout, runner=self.crsctl_runner
         )
+
         for resource in resources:
             resource_type = resource.get("TYPE", "")
             if resource_type == "ora.asm.type":
-                self.result["asm_installed"] = True
-                self.result["asm_registered"] = True
-                if resource.get("USR_ORA_INST_NAME"):
-                    self.result["asm_instance"] = resource["USR_ORA_INST_NAME"]
-                if not self.result["asm_home"]:
-                    self.result["asm_home"] = self.result["grid_home"]
-                self.result["asm_pwfile"] = resource.get("PWFILE", "")
-                self.result["asm_spfile"] = resource.get("SPFILE", "")
+                self._merge_asm_instance(resource)
             elif resource_type == "ora.database.type":
-                members = [item for item in re.split(r"[,\s]+", resource.get("HOSTING_MEMBERS", "")) if item]
-                if hostname and any(member.lower() == hostname.lower() for member in members):
-                    self._merge_crs_instance(resource, hostname)
-            elif resource_type in (
-                "ora.listener.type",
-                "ora.scan_listener.type",
-                "ora.asm_listener.type",
-            ):
-                listener_types = {
-                    "ora.listener.type": "database",
-                    "ora.asm_listener.type": "asm",
-                    "ora.scan_listener.type": "scan",
-                }
-                self._merge_crs_listener(resource, listener_types[resource_type])
-
+                self._merge_crs_instance(resource)
+            elif resource_type in ("ora.listener.type", "ora.scan_listener.type", "ora.asm_listener.type"):
+                self._merge_crs_listener(resource)
