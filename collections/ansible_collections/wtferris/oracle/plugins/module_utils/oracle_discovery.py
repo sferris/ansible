@@ -531,26 +531,30 @@ class OracleDiscovery(object):
         elif local_only in ("false", "no", "n", "0"):
             self.result["grid_type"] = "rac"
 
-    def _merge_asm_instance(self, resource):
-        hostname = self.result.get("grid_server")
+    def _server_parameter(self, resource, parameter_names):
+        hostname = self.result.get("grid_server", "")
+        for key, value in resource.items():
+            for parameter_name in parameter_names:
+                pattern = r"^{0}@SERVERNAME\(([^)]+)\)$".format(re.escape(parameter_name))
+                match = re.match(pattern, key, re.IGNORECASE)
+                if match and match.group(1).lower() == hostname.lower():
+                    return value.strip()
+        return ""
 
+    def _merge_asm_instance(self, resource):
         self.result["asm_installed"] = True
         self.result["asm_registered"] = True
 
-        asm_instance_count = int(resource.get("INSTANCE_COUNT"))
+        try:
+            asm_instance_count = int(resource.get("INSTANCE_COUNT", 1))
+        except (TypeError, ValueError):
+            asm_instance_count = 1
+
         self.result["asm_instance_count"] = asm_instance_count
 
-        if asm_instance_count > 1:
-            for key, value in resource.items():
-                # Pattern: GEN_USR_ORA_INST_NAME@SERVERNAME(<name>)=value
-                pattern = r'GEN_USR_ORA_INST_NAME@SERVERNAME\(([^)]+)\)=.*'
-                match = re.search(pattern, hostname or "", re.IGNORECASE)
-
-                if match and match.group(1) == hostname:
-                    self.result["asm_instance"] = value
-
-        elif asm_instance_count <= 1:
-            self.result["asm_instance"] = resource.get("USR_ORA_INST_NAME")
+        self.result["asm_instance"] = self._server_parameter(
+            resource, ("GEN_USR_ORA_INST_NAME", "USR_ORA_INST_NAME")
+        ) or resource.get("USR_ORA_INST_NAME", "")
 
         if not self.result["asm_home"]:
             self.result["asm_home"] = self.result["grid_home"]
@@ -559,21 +563,18 @@ class OracleDiscovery(object):
         self.result["asm_spfile"] = resource.get("SPFILE", "")
 
     def _merge_crs_instance(self, resource):
-        instance_name = None
-        hostname = self.result.get("grid_server")
+        hostname = self.result.get("grid_server", "")
 
-        instance_count = int(resource.get("INSTANCE_COUNT"))
-        if instance_count > 1:
-            for key, value in resource.items():
-                # Pattern: GEN_USR_ORA_INST_NAME@SERVERNAME(<name>)=value
-                pattern = r'GEN_USR_ORA_INST_NAME@SERVERNAME\(([^)]+)\)=.*'
-                match = re.search(pattern, hostname or "", re.IGNORECASE)
+        try:
+            instance_count = int(resource.get("INSTANCE_COUNT", 1))
+        except (TypeError, ValueError):
+            instance_count = 1
 
-                if match and match.group(1) == hostname:
-                    instance_name = value
+        self.result["instance_count"] = instance_count
 
-        elif instance_count <= 1:
-            instance_name = resource.get("USR_ORA_INST_NAME")
+        instance_name = self._server_parameter(
+            resource, ("USR_ORA_INST_NAME", "GEN_USR_ORA_INST_NAME")
+        ) or resource.get("USR_ORA_INST_NAME", "").strip()
 
         if not instance_name:
             return
@@ -637,6 +638,8 @@ class OracleDiscovery(object):
             if resource_type == "ora.asm.type":
                 self._merge_asm_instance(resource)
             elif resource_type == "ora.database.type":
-                self._merge_crs_instance(resource)
+                members = [item for item in re.split(r"[,\s]+", resource.get("HOSTING_MEMBERS", "")) if item]
+                if hostname and any(member.lower() == hostname.lower() for member in members):
+                    self._merge_crs_instance(resource)
             elif resource_type in ("ora.listener.type", "ora.scan_listener.type", "ora.asm_listener.type"):
                 self._merge_crs_listener(resource)
