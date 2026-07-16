@@ -544,9 +544,9 @@ class OracleDiscovery(object):
             for key, value in resource.items():
                 # Pattern: GEN_USR_ORA_INST_NAME@SERVERNAME(<name>)=value
                 pattern = r'GEN_USR_ORA_INST_NAME@SERVERNAME\(([^)]+)\)=.*'
-                match = re.search(pattern, hostname, re.IGNORECASE)
+                match = re.search(pattern, hostname or "", re.IGNORECASE)
 
-                if match and match.group(1) == search_name:
+                if match and match.group(1) == hostname:
                     self.result["asm_instance"] = value
 
         elif asm_instance_count <= 1:
@@ -559,6 +559,7 @@ class OracleDiscovery(object):
         self.result["asm_spfile"] = resource.get("SPFILE", "")
 
     def _merge_crs_instance(self, resource):
+        instance_name = None
         hostname = self.result.get("grid_server")
 
         instance_count = int(resource.get("INSTANCE_COUNT"))
@@ -566,9 +567,9 @@ class OracleDiscovery(object):
             for key, value in resource.items():
                 # Pattern: GEN_USR_ORA_INST_NAME@SERVERNAME(<name>)=value
                 pattern = r'GEN_USR_ORA_INST_NAME@SERVERNAME\(([^)]+)\)=.*'
-                match = re.search(pattern, hostname, re.IGNORECASE)
+                match = re.search(pattern, hostname or "", re.IGNORECASE)
 
-                if match and match.group(1) == search_name:
+                if match and match.group(1) == hostname:
                     instance_name = value
 
         elif instance_count <= 1:
