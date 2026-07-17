@@ -10,7 +10,73 @@ import os
 import re
 import shlex
 import subprocess
+import threading
 import xml.etree.ElementTree as ET
+
+if hasattr(subprocess, "run"):
+    _subprocess_run = subprocess.run
+    _SUBPROCESS_ERRORS = (OSError, subprocess.SubprocessError)
+else:
+    class _TimeoutExpired(Exception):
+        def __init__(self, cmd, timeout):
+            self.cmd = cmd
+            self.timeout = timeout
+            super(_TimeoutExpired, self).__init__(cmd, timeout)
+
+    class _CompletedProcess(object):
+        def __init__(self, returncode, stdout="", stderr=""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    def _communicate_with_timeout(process, timeout, cmd):
+        if timeout is None:
+            return process.communicate()
+
+        result = [None, None]
+        error = [None]
+
+        def target():
+            try:
+                result[0], result[1] = process.communicate()
+            except Exception as exc:
+                error[0] = exc
+
+        thread = threading.Thread(target=target)
+        thread.daemon = True
+        thread.start()
+        thread.join(timeout)
+        if thread.is_alive():
+            process.kill()
+            process.wait()
+            raise _TimeoutExpired(cmd, timeout)
+        if error[0] is not None:
+            raise error[0]
+        return result[0], result[1]
+
+    def _subprocess_run(
+        args,
+        stdout=None,
+        stderr=None,
+        universal_newlines=False,
+        timeout=None,
+        check=False,
+        env=None,
+        **kwargs
+    ):
+        process = subprocess.Popen(
+            args,
+            stdout=stdout,
+            stderr=stderr,
+            env=env,
+            universal_newlines=universal_newlines,
+        )
+        stdout_data, stderr_data = _communicate_with_timeout(process, timeout, args)
+        if check and process.returncode:
+            raise subprocess.CalledProcessError(process.returncode, args, stdout_data)
+        return _CompletedProcess(process.returncode, stdout_data or "", stderr_data or "")
+
+    _SUBPROCESS_ERRORS = (OSError, subprocess.CalledProcessError, ValueError, _TimeoutExpired)
 
 
 DEFAULT_GRID_ROOTS = ["/u01/product/grid"]
@@ -75,57 +141,64 @@ def normalize_oracle_datetime(value):
 
 def _new_instance(name=""):
     return {
-        "instance_running": False,
-        "instance_name": name,
+        "instance_audit_dest": "",
+        "instance_dbname": "",
+        "instance_dbname_unique": "",
         "instance_home": "",
-        "instance_pwfile": "",
-        "instance_spfile": "",
-        "instance_registered": False,
         "instance_in_oratab": False,
         "instance_management_policy": "",
-        "instance_audit_dest": "",
+        "instance_name": name,
+        "instance_pwfile": "",
+        "instance_registered": False,
+        "instance_running": False,
+        "instance_server": "",
+        "instance_spfile": "",
         "instance_variables": {},
     }
 
 
 def _new_listener(name=""):
     return {
-        "listener_running": False,
-        "listener_name": name,
         "listener_home": "",
-        "listener_type": "",
+        "listener_name": name,
         "listener_registered": False,
-        "listener_standard_ports": [],
+        "listener_running": False,
         "listener_ssl_ports": [],
+        "listener_standard_ports": [],
+        "listener_type": "",
+    }
+
+
+def _new_details():
+    listener = _new_listener("LISTENER")
+    return {
+        "grid_home": "",
+        "grid_installed": False,
+        "grid_running": False,
+        "grid_server": "",
+        "grid_type": "",
+        "asm_home": "",
+        "asm_installed": False,
+        "asm_instance": "",
+        "asm_pwfile": "",
+        "asm_registered": False,
+        "asm_running": False,
+        "asm_spfile": "",
+        "software_homes": {},
+        "instances": {},
+        "listener_home": listener["listener_home"],
+        "listener_name": listener["listener_name"],
+        "listener_others": {},
+        "listener_registered": listener["listener_registered"],
+        "listener_running": listener["listener_running"],
+        "listener_ssl_ports": listener["listener_ssl_ports"],
+        "listener_standard_ports": listener["listener_standard_ports"],
+        "listener_type": listener["listener_type"],
     }
 
 
 def _new_result():
-    listener = _new_listener("LISTENER")
-    return {
-        "grid_installed": False,
-        "grid_running": False,
-        "grid_home": "",
-        "grid_type": "",
-        "grid_server": "",
-        "asm_installed": False,
-        "asm_running": False,
-        "asm_instance": "",
-        "asm_registered": False,
-        "asm_home": "",
-        "asm_pwfile": "",
-        "asm_spfile": "",
-        "software_homes": {},
-        "instances": {},
-        "listener_name": listener["listener_name"],
-        "listener_running": listener["listener_running"],
-        "listener_home": listener["listener_home"],
-        "listener_type": listener["listener_type"],
-        "listener_registered": listener["listener_registered"],
-        "listener_standard_ports": listener["listener_standard_ports"],
-        "listener_ssl_ports": listener["listener_ssl_ports"],
-        "listener_others": {},
-    }
+    return {"details": _new_details()}
 
 
 def parse_key_value_file(path):
@@ -159,6 +232,8 @@ def parse_inventory_xml(path):
             if _local_name(home.tag) != "HOME":
                 continue
             location = home.attrib.get("LOC", "").strip()
+            if home.attrib.get("REMOVED", "").strip() == "T":
+                continue
             if not location:
                 continue
             homes.append({
@@ -288,7 +363,7 @@ def parse_listener_endpoints(value):
 
 def _run_crsctl(grid_home, arguments, timeout=10, runner=None):
     """Run crsctl safely with an argument list and a controlled locale."""
-    runner = runner or subprocess.run
+    runner = runner or _subprocess_run
     executable = os.path.join(normalize_path(grid_home), "bin", "crsctl")
     environment = os.environ.copy()
     environment["LC_ALL"] = "C"
@@ -302,7 +377,7 @@ def _run_crsctl(grid_home, arguments, timeout=10, runner=None):
             check=False,
             env=environment,
         )
-    except (OSError, subprocess.SubprocessError):
+    except _SUBPROCESS_ERRORS:
         return ""
     if completed.returncode != 0:
         return ""
@@ -343,6 +418,7 @@ class OracleDiscovery(object):
         self.crsctl_timeout = crsctl_timeout
         self.crsctl_runner = crsctl_runner
         self.result = _new_result()
+        self.details = self.result["details"]
 
     def discover(self):
         self.discover_software_homes()
@@ -350,9 +426,9 @@ class OracleDiscovery(object):
         self.discover_oratab()
         self.discover_grid_type()
         self.discover_crsctl()
-        self.result["software_homes"] = dict(sorted(self.result["software_homes"].items()))
-        self.result["instances"] = dict(sorted(self.result["instances"].items()))
-        self.result["listener_others"] = dict(sorted(self.result["listener_others"].items()))
+        self.details["software_homes"] = dict(sorted(self.details["software_homes"].items()))
+        self.details["instances"] = dict(sorted(self.details["instances"].items()))
+        self.details["listener_others"] = dict(sorted(self.details["listener_others"].items()))
         return self.result
 
     def _software_home_key(self, path):
@@ -368,7 +444,7 @@ class OracleDiscovery(object):
         key = self._software_home_key(home)
         if not key:
             return
-        record = self.result["software_homes"].setdefault(key, {
+        record = self.details["software_homes"].setdefault(key, {
             "software_home": home,
             "software_homename": homename or os.path.basename(home),
             "software_type": "",
@@ -381,9 +457,9 @@ class OracleDiscovery(object):
         if homename:
             record["software_homename"] = homename
         if self._is_grid_home(home):
-            self.result["grid_installed"] = True
-            if not self.result["grid_home"]:
-                self.result["grid_home"] = home
+            self.details["grid_installed"] = True
+            if not self.details["grid_home"]:
+                self.details["grid_home"] = home
 
     def discover_software_homes(self):
         for pointer_path in self.orainst_paths:
@@ -403,7 +479,7 @@ class OracleDiscovery(object):
                 home = os.path.dirname(os.path.dirname(os.path.dirname(comps_path)))
                 self._add_software_home(home)
 
-        for record in self.result["software_homes"].values():
+        for record in self.details["software_homes"].values():
             comps_path = os.path.join(record["software_home"], "inventory", "ContentsXML", "comps.xml")
             record.update(parse_comps_xml(comps_path))
 
@@ -432,20 +508,20 @@ class OracleDiscovery(object):
 
     def _set_default_listener(self, record):
         for key, value in record.items():
-            self.result[key] = value
+            self.details[key] = value
 
     def _get_listener(self, name):
         if name.lower() == "listener":
-            record = _new_listener(self.result.get("listener_name") or name)
+            record = _new_listener(self.details.get("listener_name") or name)
             for key in record:
-                if key in self.result:
-                    record[key] = self.result[key]
+                if key in self.details:
+                    record[key] = self.details[key]
             return record, True
-        for existing_name, record in self.result["listener_others"].items():
+        for existing_name, record in self.details["listener_others"].items():
             if existing_name.lower() == name.lower():
                 return record, False
         record = _new_listener(name)
-        self.result["listener_others"][name] = record
+        self.details["listener_others"][name] = record
         return record, False
 
     def discover_processes(self):
@@ -461,28 +537,28 @@ class OracleDiscovery(object):
             process_name = os.path.basename(arguments[0])
             home = self._process_home(pid)
 
-            if process_name == "ocssd.bin":
-                self.result["grid_installed"] = True
-                self.result["grid_running"] = True
+            if process_name == "ohasd.bin":
+                self.details["grid_installed"] = True
+                self.details["grid_running"] = True
                 if home:
-                    self.result["grid_home"] = home
+                    self.details["grid_home"] = home
                     self._add_software_home(home)
                 continue
 
             asm_match = re.match(r"^asm_pmon_(\+ASM\d*)$", process_name, re.IGNORECASE)
             if asm_match:
-                self.result["asm_installed"] = True
-                self.result["asm_running"] = True
-                self.result["asm_instance"] = asm_match.group(1)
+                self.details["asm_installed"] = True
+                self.details["asm_running"] = True
+                self.details["asm_instance"] = asm_match.group(1)
                 if home:
-                    self.result["asm_home"] = home
+                    self.details["asm_home"] = home
                 continue
 
             instance_match = re.match(r"^ora_pmon_(.+)$", process_name)
             if instance_match:
                 instance_name = instance_match.group(1)
                 key = instance_name.lower()
-                instance = self.result["instances"].setdefault(key, _new_instance(instance_name))
+                instance = self.details["instances"].setdefault(key, _new_instance(instance_name))
                 instance["instance_running"] = True
                 if home:
                     instance["instance_home"] = home
@@ -509,14 +585,14 @@ class OracleDiscovery(object):
         for record in records:
             instance_name = record["instance_name"]
             if re.match(r"^\+ASM\d*$", instance_name, re.IGNORECASE):
-                self.result["asm_installed"] = True
-                if not self.result["asm_instance"]:
-                    self.result["asm_instance"] = instance_name
-                if not self.result["asm_home"]:
-                    self.result["asm_home"] = record["instance_home"]
+                self.details["asm_installed"] = True
+                if not self.details["asm_instance"]:
+                    self.details["asm_instance"] = instance_name
+                if not self.details["asm_home"]:
+                    self.details["asm_home"] = record["instance_home"]
                 continue
             key = instance_name.lower()
-            instance = self.result["instances"].setdefault(key, _new_instance(instance_name))
+            instance = self.details["instances"].setdefault(key, _new_instance(instance_name))
             instance["instance_in_oratab"] = True
             if not instance["instance_home"]:
                 instance["instance_home"] = record["instance_home"]
@@ -527,62 +603,75 @@ class OracleDiscovery(object):
             return
         local_only = values["local_only"].strip().lower()
         if local_only in ("true", "yes", "y", "1"):
-            self.result["grid_type"] = "restart"
+            self.details["grid_type"] = "Restart"
         elif local_only in ("false", "no", "n", "0"):
-            self.result["grid_type"] = "rac"
+            self.details["grid_type"] = "RAC"
 
-    def _server_parameter(self, resource, parameter_names):
-        hostname = self.result.get("grid_server", "")
+    def _server_parameter(self, resource, parameter_name):
+        hostname = self.details.get("grid_server", "")
+
+        #debug = []
         for key, value in resource.items():
-            for parameter_name in parameter_names:
-                pattern = r"^{0}@SERVERNAME\(([^)]+)\)$".format(re.escape(parameter_name))
-                match = re.match(pattern, key, re.IGNORECASE)
-                if match and match.group(1).lower() == hostname.lower():
-                    return value.strip()
+            #debug.append(key)
+
+            #GEN_USR_ORA_INST_NAME=
+            #GEN_USR_ORA_INST_NAME@SERVERNAME(t16-31b1)=lab01c_01
+            #GEN_USR_ORA_INST_NAME@SERVERNAME(t16-31b2)=lab01c_02
+
+            pattern = r"^{0}@SERVERNAME\(([^)]+)\)$".format(re.escape(parameter_name))
+
+            match = re.match(pattern, key, re.IGNORECASE)
+            if match and match.group(1).lower() == hostname.lower():
+                return value.strip()
+
+        #if resource.get("ID") == "ora.lab01c.db":
+        #    self.details["debug"]={"parameters": debug, "hostname": hostname}
+
         return ""
 
     def _merge_asm_instance(self, resource):
-        self.result["asm_installed"] = True
-        self.result["asm_registered"] = True
+        self.details["asm_installed"] = True
+        self.details["asm_registered"] = True
 
         try:
             asm_instance_count = int(resource.get("INSTANCE_COUNT", 1))
         except (TypeError, ValueError):
-            asm_instance_count = 1
+            asm_instance_count = 0
 
-        self.result["asm_instance_count"] = asm_instance_count
+        self.details["asm_instance_count"] = asm_instance_count
 
-        self.result["asm_instance"] = self._server_parameter(
-            resource, ("GEN_USR_ORA_INST_NAME", "USR_ORA_INST_NAME")
-        ) or resource.get("USR_ORA_INST_NAME", "")
+        self.details["asm_instance_name"] = self._server_parameter(resource, "GEN_USR_ORA_INST_NAME") or resource.get("USR_ORA_INST_NAME", "")
 
-        if not self.result["asm_home"]:
-            self.result["asm_home"] = self.result["grid_home"]
+        if not self.details["asm_home"]:
+            self.details["asm_home"] = self.details["grid_home"]
 
-        self.result["asm_pwfile"] = resource.get("PWFILE", "")
-        self.result["asm_spfile"] = resource.get("SPFILE", "")
+        self.details["asm_pwfile"] = resource.get("PWFILE", "")
+        self.details["asm_spfile"] = resource.get("SPFILE", "")
 
     def _merge_crs_instance(self, resource):
-        hostname = self.result.get("grid_server", "")
+        hostname = self.details.get("grid_server", "")
 
         try:
             instance_count = int(resource.get("INSTANCE_COUNT", 1))
         except (TypeError, ValueError):
-            instance_count = 1
+            instance_count = 0
 
-        self.result["instance_count"] = instance_count
-
-        instance_name = self._server_parameter(
-            resource, ("USR_ORA_INST_NAME", "GEN_USR_ORA_INST_NAME")
-        ) or resource.get("USR_ORA_INST_NAME", "").strip()
+        instance_name = self._server_parameter(resource, "GEN_USR_ORA_INST_NAME") or resource.get("USR_ORA_INST_NAME", "").strip()
 
         if not instance_name:
-            return
+            instance_name = resource.get("NAME", "")
 
         key = instance_name.lower()
-        instance = self.result["instances"].setdefault(key, _new_instance(instance_name))
+        instance = self.details["instances"].setdefault(key, _new_instance(instance_name))
         instance["instance_registered"] = True
         instance["instance_name"] = instance_name
+        instance["instance_count"] = instance_count
+
+        match = re.match(r"^ora\.(.+)\.db$", resource.get("NAME", ""), re.IGNORECASE)
+        if match:
+          instance["instance_dbname"] = match.group(1)
+        instance["instance_dbname_unique"] = resource.get("DB_UNIQUE_NAME", "")
+
         values = {
             "instance_home": normalize_path(resource.get("ORACLE_HOME", "")),
             "instance_pwfile": resource.get("PWFILE", ""),
@@ -598,9 +687,16 @@ class OracleDiscovery(object):
                 instance[field] = value
 
     def _merge_crs_listener(self, resource):
-        match = re.match(r"^ora\.(.+)\.lsnr$", resource.get("NAME", ""), re.IGNORECASE)
-        if not match:
-            return
+        listener_type = resource.get("TYPE")
+
+        if listener_type == "ora.mgmtlsnr.type":
+          match = re.match(r"^ora\.(.+)?$", resource.get("NAME", ""), re.IGNORECASE)
+          if not match:
+              return
+        else:
+          match = re.match(r"^ora\.(.+)\.lsnr?(?:\([^)]*\))?$", resource.get("NAME", ""), re.IGNORECASE)
+          if not match:
+              return
 
         listener_types = {
             "ora.listener.type": "database",
@@ -612,7 +708,7 @@ class OracleDiscovery(object):
         listener, is_default = self._get_listener(listener_name)
         listener["listener_name"] = listener_name
         listener["listener_registered"] = True
-        listener["listener_type"] = listener_types[resource.get("TYPE")]
+        listener["listener_type"] = resource.get("TYPE")
 
         standard, ssl = parse_listener_endpoints(resource.get("ENDPOINTS", ""))
         listener["listener_standard_ports"] = standard
@@ -622,24 +718,22 @@ class OracleDiscovery(object):
             self._set_default_listener(listener)
 
     def discover_crsctl(self):
-        if not self.result["grid_home"]:
+        if not self.details["grid_home"]:
             return
         hostname = crsctl_get_hostname(
-            self.result["grid_home"], timeout=self.crsctl_timeout, runner=self.crsctl_runner
+            self.details["grid_home"], timeout=self.crsctl_timeout, runner=self.crsctl_runner
         )
-        self.result["grid_server"] = hostname
+        self.details["grid_server"] = hostname
 
         resources = crsctl_stat_resources(
-            self.result["grid_home"], timeout=self.crsctl_timeout, runner=self.crsctl_runner
+            self.details["grid_home"], timeout=self.crsctl_timeout, runner=self.crsctl_runner
         )
 
         for resource in resources:
             resource_type = resource.get("TYPE", "")
             if resource_type == "ora.asm.type":
                 self._merge_asm_instance(resource)
-            elif resource_type == "ora.database.type":
-                members = [item for item in re.split(r"[,\s]+", resource.get("HOSTING_MEMBERS", "")) if item]
-                if hostname and any(member.lower() == hostname.lower() for member in members):
-                    self._merge_crs_instance(resource)
-            elif resource_type in ("ora.listener.type", "ora.scan_listener.type", "ora.asm_listener.type"):
+            elif resource_type in ("ora.database.type", "ora.mgmtdb.type"):
+                self._merge_crs_instance(resource)
+            elif resource_type in ("ora.listener.type", "ora.scan_listener.type", "ora.asm_listener.type", "ora.mgmtlsnr.type"):
                 self._merge_crs_listener(resource)
