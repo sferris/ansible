@@ -5,23 +5,33 @@
 from __future__ import absolute_import, division, print_function
 
 import glob
-from datetime import datetime
 import os
 import re
 import shlex
 import subprocess
 import threading
 import xml.etree.ElementTree as ET
+from datetime import datetime
+import time
 
-if hasattr(subprocess, "run"):
-    _subprocess_run = subprocess.run
-    _SUBPROCESS_ERRORS = (OSError, subprocess.SubprocessError)
-else:
+# For Python 2.7 compatibility, we need to handle the subprocess.run differently
+# Since subprocess.run was added in Python 3.5, we need this compatibility layer
+
+try:
+    # Python 3+ with subprocess.run
+    if hasattr(subprocess, "run"):
+        _subprocess_run = subprocess.run # type: ignore
+        _SUBPROCESS_ERRORS = (OSError, subprocess.SubprocessError)
+    else:
+        # This shouldn't happen in Python 3.5+, but just in case
+        raise AttributeError("subprocess.run not available")
+except AttributeError:
+    # Python 2.7 compatible implementation
     class _TimeoutExpired(Exception):
         def __init__(self, cmd, timeout):
             self.cmd = cmd
             self.timeout = timeout
-            super(_TimeoutExpired, self).__init__(cmd, timeout)
+            super(_TimeoutExpired, self).__init__("%s timed out after %s seconds" % (cmd, timeout))
 
     class _CompletedProcess(object):
         def __init__(self, returncode, stdout="", stderr=""):
@@ -40,14 +50,18 @@ else:
             try:
                 result[0], result[1] = process.communicate()
             except Exception as exc:
-                error[0] = exc
+                error[0] = exc # type: ignore
 
         thread = threading.Thread(target=target)
         thread.daemon = True
         thread.start()
         thread.join(timeout)
         if thread.is_alive():
-            process.kill()
+            # Kill the process
+            try:
+                process.kill()
+            except:
+                pass  # Process might have already terminated
             process.wait()
             raise _TimeoutExpired(cmd, timeout)
         if error[0] is not None:
@@ -64,20 +78,28 @@ else:
         env=None,
         **kwargs
     ):
+        # Handle the universal_newlines parameter for Python 2.7
+        if universal_newlines:
+            kwargs['universal_newlines'] = True
+
         process = subprocess.Popen(
             args,
             stdout=stdout,
             stderr=stderr,
             env=env,
-            universal_newlines=universal_newlines,
+            **kwargs
         )
+
         stdout_data, stderr_data = _communicate_with_timeout(process, timeout, args)
+
         if check and process.returncode:
+            # Create a more descriptive error message for Python 2.7
+            # error_msg = "Command '%s' returned non-zero exit status %d" % (args, process.returncode)
             raise subprocess.CalledProcessError(process.returncode, args, stdout_data)
+
         return _CompletedProcess(process.returncode, stdout_data or "", stderr_data or "")
 
     _SUBPROCESS_ERRORS = (OSError, subprocess.CalledProcessError, ValueError, _TimeoutExpired)
-
 
 DEFAULT_GRID_ROOTS = ["/u01/product/grid"]
 DEFAULT_ORACLE_ROOTS = ["/u01/product/oracle"]
@@ -698,11 +720,11 @@ class OracleDiscovery(object):
           if not match:
               return
 
-        listener_types = {
-            "ora.listener.type": "database",
-            "ora.asm_listener.type": "asm",
-            "ora.scan_listener.type": "scan",
-        }
+        # listener_types = {
+        #     "ora.listener.type": "database",
+        #     "ora.asm_listener.type": "asm",
+        #     "ora.scan_listener.type": "scan",
+        # }
 
         listener_name = match.group(1)
         listener, is_default = self._get_listener(listener_name)
