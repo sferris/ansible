@@ -20,11 +20,12 @@ import time
 try:
     # Python 3+ with subprocess.run
     if hasattr(subprocess, "run"):
-        _subprocess_run = subprocess.run # type: ignore
+        _subprocess_run = subprocess.run
         _SUBPROCESS_ERRORS = (OSError, subprocess.SubprocessError)
     else:
         # This shouldn't happen in Python 3.5+, but just in case
         raise AttributeError("subprocess.run not available")
+
 except AttributeError:
     # Python 2.7 compatible implementation
     class _TimeoutExpired(Exception):
@@ -50,7 +51,7 @@ except AttributeError:
             try:
                 result[0], result[1] = process.communicate()
             except Exception as exc:
-                error[0] = exc # type: ignore
+                error[0] = exc
 
         thread = threading.Thread(target=target)
         thread.daemon = True
