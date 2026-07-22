@@ -49,6 +49,28 @@ Custom software roots can be supplied when installations do not use the defaults
   register: oracle
 ```
 
+### `wtferris.oracle.home_version`
+
+Run OPatch explicitly for one Oracle home and return the `oracle.server` base version and the highest `Database Release Update` patch version:
+
+```yaml
+- name: Read Oracle home versions
+  wtferris.oracle.home_version:
+    oracle_home: /u01/product/oracle/db19
+  register: oracle_version
+
+- name: Check the installed release update
+  ansible.builtin.debug:
+    msg: "Installed RU is {{ oracle_version.database_release_update_version }}"
+  when: >-
+    oracle_version.database_release_update_version_key >=
+    '000000000019.000000000026.000000000000.000000000000.000000250121'
+```
+
+Versions are normalized to five positions. For example, `12.1.0.2` becomes `12.1.0.2.0`. The returned integer `*_version_parts` lists and fixed-width `*_version_key` strings preserve component-wise version ordering; unlike decimal conversion, they do not lose version boundaries or precision. `home_patched` reports whether the OPatch inventory contains any patch, independently of whether a Database Release Update is present.
+
+This module is independent of discovery and only runs when explicitly invoked with an `oracle_home`.
+
 ## Requirements
 
 - Ansible Core 2.15 or newer

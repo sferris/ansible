@@ -12,3 +12,25 @@
     - name: Display Oracle discovery results
       debug:
         var: oracle
+
+    - name: Read Oracle home versions
+      become: true
+      become_user: oracle
+      wtferris.oracle.home_version:
+        oracle_home: /u01/product/oracle/linux-x64-12.1.0.2.0-db-base
+        timeout: 120
+      register: oracle_version
+    
+    - ansible.builtin.debug:
+        var: oracle_version
+
+    - name: Read Oracle home versions
+      become: true
+      become_user: oracle
+      wtferris.oracle.home_version:
+        oracle_home: /u01/product/oracle/linux-x64-19.26.0.0.250121-db
+        timeout: 120
+      register: oracle_version
+    
+    - ansible.builtin.debug:
+        var: oracle_version
