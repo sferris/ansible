@@ -627,17 +627,19 @@ class OracleDiscovery(object):
           if not match:
               return
 
-        # listener_types = {
-        #     "ora.listener.type": "database",
-        #     "ora.asm_listener.type": "asm",
-        #     "ora.scan_listener.type": "scan",
-        # }
+        listener_types = {
+            "ora.listener.type": "database",
+            "ora.asm_listener.type": "asm",
+            "ora.scan_listener.type": "scan",
+            "ora.mgmtlsnr.type": "management",
+        }
+
 
         listener_name = match.group(1)
         listener, is_default = self._get_listener(listener_name)
         listener["listener_name"] = listener_name
         listener["listener_registered"] = True
-        listener["listener_type"] = resource.get("TYPE")
+        listener["listener_type"] = listener_types.get(listener_type, "")
 
         standard, ssl = parse_listener_endpoints(resource.get("ENDPOINTS", ""))
         listener["listener_standard_ports"] = standard
@@ -663,6 +665,12 @@ class OracleDiscovery(object):
             if resource_type == "ora.asm.type":
                 self._merge_asm_instance(resource)
             elif resource_type in ("ora.database.type", "ora.mgmtdb.type"):
-                self._merge_crs_instance(resource)
+                members = [
+                    item
+                    for item in re.split(r"[,\s]+", resource.get("HOSTING_MEMBERS", ""))
+                    if item
+                ]
+                if hostname and any(member.lower() == hostname.lower() for member in members):
+                    self._merge_crs_instance(resource)
             elif resource_type in ("ora.listener.type", "ora.scan_listener.type", "ora.asm_listener.type", "ora.mgmtlsnr.type"):
                 self._merge_crs_listener(resource)

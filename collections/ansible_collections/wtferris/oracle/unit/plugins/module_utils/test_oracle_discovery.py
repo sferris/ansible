@@ -203,7 +203,7 @@ class DiscoveryTests(unittest.TestCase):
             )
             self._write(ocr, "local_only=false\n")
 
-            self._process(proc_root, 10, [os.path.join(grid_home, "bin", "ocssd.bin")], os.path.join(grid_home, "bin", "ocssd.bin"))
+            self._process(proc_root, 10, [os.path.join(grid_home, "bin", "ohasd.bin")], os.path.join(grid_home, "bin", "ohasd.bin"))
             self._process(proc_root, 11, ["asm_pmon_+ASM1"], os.path.join(grid_home, "bin", "oracle"))
             self._process(proc_root, 12, ["ora_pmon_SMF01d_01"], os.path.join(db_home, "bin", "oracle"))
             self._process(proc_root, 13, [os.path.join(grid_home, "bin", "tnslsnr"), "LISTENER", "-inherit"], os.path.join(grid_home, "bin", "tnslsnr"))
@@ -219,8 +219,8 @@ NAME=ora.smf.db
 TYPE=ora.database.type
 HOSTING_MEMBERS=node01 node02
 USR_ORA_INST_NAME=
-USR_ORA_INST_NAME@SERVERNAME(node01)=SMF01d_01
-USR_ORA_INST_NAME@SERVERNAME(node02)=SMF02d_01
+GEN_USR_ORA_INST_NAME@SERVERNAME(node01)=SMF01d_01
+GEN_USR_ORA_INST_NAME@SERVERNAME(node02)=SMF02d_01
 ORACLE_HOME={db_home}
 PWFILE=+DATA/orapwsmf
 SPFILE=+DATA/spfilesmf.ora
@@ -264,12 +264,12 @@ ENDPOINTS=TCP:1526
                 oratab_paths=[oratab],
                 ocr_path=ocr,
                 crsctl_runner=runner,
-            ).discover()
+            ).discover()["details"]
 
             self.assertTrue(result["grid_installed"])
             self.assertTrue(result["grid_running"])
             self.assertEqual(result["grid_home"], grid_home)
-            self.assertEqual(result["grid_type"], "rac")
+            self.assertEqual(result["grid_type"], "RAC")
             self.assertEqual(result["grid_server"], "node01")
 
             self.assertTrue(result["asm_installed"])
