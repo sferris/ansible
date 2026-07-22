@@ -8,90 +8,10 @@ import glob
 import os
 import re
 import shlex
-import subprocess
-import threading
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
-# For Python 2.7 compatibility, we need to handle the subprocess.run differently
-# Since subprocess.run was added in Python 3.5, we need this compatibility layer
-
-# Define shared custom exceptions and classes first to avoid scope/binding warnings
-class _TimeoutExpired(Exception):
-    def __init__(self, cmd, timeout):
-        self.cmd = cmd
-        self.timeout = timeout
-        super(_TimeoutExpired, self).__init__("%s timed out after %s seconds" % (cmd, timeout))
-
-class _CompletedProcess(object):
-    def __init__(self, returncode, stdout="", stderr=""):
-        self.returncode = returncode
-        self.stdout = stdout
-        self.stderr = stderr
-
-def _communicate_with_timeout(process, timeout, cmd):
-    if timeout is None:
-        return process.communicate()
-
-    result = [None, None]
-    error = [None]
-
-    def target():
-        try:
-            result[0], result[1] = process.communicate()
-        except Exception as exc:
-            error[0] = exc # type: ignore[assignment]
-
-    thread = threading.Thread(target=target)
-    thread.daemon = True
-    thread.start()
-    thread.join(timeout)
-    if thread.is_alive():
-        try:
-            process.kill()
-        except Exception:
-            pass
-        process.wait()
-        raise _TimeoutExpired(cmd, timeout)
-    if error[0] is not None:
-        raise error[0]
-    return result[0], result[1]
-
-def _py2_subprocess_run(
-    args,
-    stdout=None,
-    stderr=None,
-    universal_newlines=False,
-    timeout=None,
-    check=False,
-    env=None,
-    **kwargs
-):
-    if universal_newlines:
-        kwargs['universal_newlines'] = True
-
-    process = subprocess.Popen(
-        args,
-        stdout=stdout,
-        stderr=stderr,
-        env=env,
-        **kwargs
-    )
-
-    stdout_data, stderr_data = _communicate_with_timeout(process, timeout, args)
-
-    if check and process.returncode:
-        raise subprocess.CalledProcessError(process.returncode, args, stdout_data)
-
-    return _CompletedProcess(process.returncode, stdout_data or "", stderr_data or "")
-
-# Clear branch for the type checker: Python 3 vs Python 2 fallback
-if hasattr(subprocess, "run"):
-    _subprocess_run = subprocess.run
-    _SUBPROCESS_ERRORS = (OSError, subprocess.SubprocessError)
-else:
-    _subprocess_run = _py2_subprocess_run
-    _SUBPROCESS_ERRORS = (OSError, subprocess.CalledProcessError, ValueError, _TimeoutExpired)
+from .oracle_command import EXECUTABLE_ERRORS, run_executable
 
 DEFAULT_GRID_ROOTS = ["/u01/product/grid"]
 DEFAULT_ORACLE_ROOTS = ["/u01/product/oracle"]
@@ -377,21 +297,16 @@ def parse_listener_endpoints(value):
 
 def _run_crsctl(grid_home, arguments, timeout=10, runner=None):
     """Run crsctl safely with an argument list and a controlled locale."""
-    runner = runner or _subprocess_run
     executable = os.path.join(normalize_path(grid_home), "bin", "crsctl")
-    environment = os.environ.copy()
-    environment["LC_ALL"] = "C"
     try:
-        completed = runner(
-            [executable] + list(arguments),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True,
+        completed = run_executable(
+            executable,
+            arguments,
             timeout=timeout,
-            check=False,
-            env=environment,
+            runner=runner,
+            env_overrides={"LC_ALL": "C"},
         )
-    except _SUBPROCESS_ERRORS:
+    except EXECUTABLE_ERRORS:
         return ""
     if completed.returncode != 0:
         return ""

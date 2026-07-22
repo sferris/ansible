@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from types import SimpleNamespace
 
+from plugins.module_utils.oracle_command import CommandResult, run_executable
 from plugins.module_utils.oracle_discovery import (
     OracleDiscovery,
     crsctl_get_hostname,
@@ -105,6 +106,25 @@ USR_ORA_ENV=patch=\"foo bar\" home=baz empty= invalid
         self.assertEqual(variables, {"patch": "foo bar", "home": "baz", "empty": ""})
         self.assertEqual(standard, [1521, 1522])
         self.assertEqual(ssl, [5500])
+
+    def test_run_executable_supports_arbitrary_commands_and_environment(self):
+        calls = []
+
+        def runner(command, **kwargs):
+            calls.append((command, kwargs))
+            return CommandResult(0, "output\n", "")
+
+        completed = run_executable(
+            "/opt/oracle/bin/tool",
+            ["inventory", "--xml"],
+            runner=runner,
+            env={"ORACLE_HOME": "/opt/oracle"},
+            env_overrides={"LC_ALL": "C"},
+        )
+
+        self.assertEqual(completed.stdout, "output\n")
+        self.assertEqual(calls[0][0], ["/opt/oracle/bin/tool", "inventory", "--xml"])
+        self.assertEqual(calls[0][1]["env"], {"ORACLE_HOME": "/opt/oracle", "LC_ALL": "C"})
 
     def test_crsctl_utility_uses_argument_lists(self):
         calls = []
