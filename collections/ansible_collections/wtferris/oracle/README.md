@@ -71,6 +71,30 @@ Versions are normalized to five positions. For example, `12.1.0.2` becomes `12.1
 
 This module is independent of discovery and only runs when explicitly invoked with an `oracle_home`.
 
+### `wtferris.oracle.package_install`
+
+Download, checksum, extract, and install a single-directory `.tgz`, `.tar.gz`, or `.zip` archive without placing temporary data beneath the remote user's home:
+
+```yaml
+- name: Install a package into /u01
+  wtferris.oracle.package_install:
+    installation_path: /u01/software
+    temporary_directory_root: /u01/tmp
+    source_url: https://packages.example.com/product.tar.gz
+    md5sum: 0123456789abcdef0123456789abcdef
+  register: package
+```
+
+The module calculates MD5 while downloading, verifies an optional expected checksum before extraction, validates archive member paths, requires exactly one top-level directory, and records successful installations as `.MD5.md5` symlinks beneath `~/.package_installation` by default. It uses operating-system `gzip`, `tar`, and `unzip` executables and supports local paths plus `file://`, `http://`, and `https://` sources.
+
+Set `skip_post_relocation: true` to retain the extracted package in the returned `temporary_directory`. Normal relocation also returns the temporary path for troubleshooting, but that directory is removed after success. Set `force: true` to bypass inventory idempotency and rename an existing destination to `<destination>.trash` before installing the replacement.
+
+The implementation is reusable by other collection modules:
+
+```python
+from ansible_collections.wtferris.oracle.plugins.module_utils.package_installer import install_package
+```
+
 ## Requirements
 
 - Ansible Core 2.15 or newer
