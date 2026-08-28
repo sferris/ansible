@@ -13,24 +13,42 @@
       debug:
         var: oracle
 
-    - name: Read Oracle home versions
-      become: true
-      become_user: oracle
-      wtferris.oracle.home_version:
-        oracle_home: /u01/product/oracle/linux-x64-12.1.0.2.0-db-base
-        timeout: 120
-      register: oracle_version
-    
-    - ansible.builtin.debug:
-        var: oracle_version
+    # - name: Read Oracle home versions
+    #   become: true
+    #   become_user: oracle
+    #   wtferris.oracle.home_version:
+    #     oracle_home: /u01/product/oracle/linux-x64-12.1.0.2.0-db-base
+    #     timeout: 120
+    #   register: oracle_version
+    # 
+    # - ansible.builtin.debug:
+    #     var: oracle_version
 
-    - name: Read Oracle home versions
-      become: true
+    # - name: Read Oracle home versions
+    #   become: true
+    #   become_user: oracle
+    #   wtferris.oracle.home_version:
+    #     oracle_home: /u01/product/oracle/linux-x64-19.26.0.0.250121-db
+    #     timeout: 120
+    #   register: oracle_version
+    # 
+    # - ansible.builtin.debug:
+    #     var: oracle_version
+
+    - name: Install package
+      become: yes
       become_user: oracle
-      wtferris.oracle.home_version:
-        oracle_home: /u01/product/oracle/linux-x64-19.26.0.0.250121-db
-        timeout: 120
-      register: oracle_version
-    
+      wtferris.oracle.package_install:
+        #temporary_directory_root: /u01/tmp
+        #package_inventory_directory: /u01/.packages
+        installation_path: /u01/product/oracle
+        source_url: file:///u01/tmp/linux-x64-12.1.0.2.0-db-base.tar.gz
+        md5sum: 03eaac0b8040df41548128143c8d245c
+        insecure: false
+        force: false
+        skip_post_relocation: true
+      register: package
+
+
     - ansible.builtin.debug:
-        var: oracle_version
+        var: package

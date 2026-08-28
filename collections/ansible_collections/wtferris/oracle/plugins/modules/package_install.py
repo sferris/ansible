@@ -138,7 +138,7 @@ def main():
             "md5sum": {"type": "str", "default": None},
             "package_inventory_directory": {
                 "type": "path",
-                "default": "~/.package_installation",
+                "default": "~/.packages",
             },
             "force": {"type": "bool", "default": False},
         },

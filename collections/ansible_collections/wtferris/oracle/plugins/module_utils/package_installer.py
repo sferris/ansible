@@ -2,7 +2,7 @@
 
 """Install a single-directory package from a local or remote archive."""
 
-from __future__ import absolute_import, division, print_function
+#from __future__ import absolute_import, division, print_function
 
 import hashlib
 import os
@@ -178,7 +178,7 @@ def install_package(installation_path, source_url, temp_root=None, insecure=Fals
     if expected_md5 and not re.match(r"^[0-9a-f]{32}$", expected_md5):
         raise PackageInstallationError("md5sum must contain exactly 32 hexadecimal characters")
     inventory_directory = os.path.expanduser(
-        inventory_directory or "~/.package_installation"
+        inventory_directory or "~/.packages"
     )
     tempdir = None
     calculated_md5 = None
