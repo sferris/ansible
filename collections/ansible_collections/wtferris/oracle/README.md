@@ -78,7 +78,7 @@ Download, checksum, and unpack a `.tgz`, `.tar.gz`, or `.zip` archive into prese
 ```yaml
 - name: Download and unpack beneath /u01/tmp
   wtferris.oracle.fetch_archive:
-    temporary_directory_root: /u01/tmp
+    installation_path: /u01/tmp
     source_url: https://packages.example.com/product.tar.gz
     md5sum: 0123456789abcdef0123456789abcdef
   register: archive

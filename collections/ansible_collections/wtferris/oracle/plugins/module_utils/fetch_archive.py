@@ -143,7 +143,7 @@ def _validate_members(listing):
     return members
 
 
-def fetch_archive(source_url, temporary_directory_root=None, insecure=False, md5sum=None):
+def fetch_archive(source_url, installation_path=None, insecure=False, md5sum=None):
     """Download, optionally verify, and unpack an archive into temporary storage."""
     expected_md5 = md5sum.lower() if md5sum else None
     if expected_md5 and not re.match(r"^[0-9a-f]{32}$", expected_md5):
@@ -152,11 +152,11 @@ def fetch_archive(source_url, temporary_directory_root=None, insecure=False, md5
     temporary_directory = None
     calculated_md5 = None
     try:
-        if temporary_directory_root and not os.path.isdir(temporary_directory_root):
-            os.makedirs(temporary_directory_root)
+        if installation_path and not os.path.isdir(installation_path):
+            os.makedirs(installation_path)
         temporary_directory = tempfile.mkdtemp(
             prefix="fetch-archive-",
-            dir=temporary_directory_root,
+            dir=installation_path,
         )
         unpack_directory = os.path.join(temporary_directory, "extract")
         os.mkdir(unpack_directory)

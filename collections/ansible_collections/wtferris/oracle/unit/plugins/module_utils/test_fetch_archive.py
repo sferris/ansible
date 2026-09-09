@@ -51,7 +51,7 @@ class FetchArchiveTests(unittest.TestCase):
     def test_unpacks_tar_and_preserves_temporary_directory(self):
         archive = self._tar()
 
-        result = fetch_archive(archive, temporary_directory_root=self.temporary_root)
+        result = fetch_archive(archive, installation_path=self.temporary_root)
         self.addCleanup(shutil.rmtree, result["temporary_directory"], True)
 
         self.assertTrue(result["changed"])
@@ -73,7 +73,7 @@ class FetchArchiveTests(unittest.TestCase):
     def test_returns_multiple_top_level_entries(self):
         archive = self._tar(names=("one", "two"))
 
-        result = fetch_archive(archive, temporary_directory_root=self.temporary_root)
+        result = fetch_archive(archive, installation_path=self.temporary_root)
         self.addCleanup(shutil.rmtree, result["temporary_directory"], True)
 
         self.assertEqual(result["contents"], ["one", "two"])
@@ -83,7 +83,7 @@ class FetchArchiveTests(unittest.TestCase):
 
         result = fetch_archive(
             "file://" + archive,
-            temporary_directory_root=self.temporary_root,
+            installation_path=self.temporary_root,
         )
         self.addCleanup(shutil.rmtree, result["temporary_directory"], True)
 
@@ -97,7 +97,7 @@ class FetchArchiveTests(unittest.TestCase):
 
         result = fetch_archive(
             archive,
-            temporary_directory_root=self.temporary_root,
+            installation_path=self.temporary_root,
             md5sum=self._md5(archive).upper(),
         )
         self.addCleanup(shutil.rmtree, result["temporary_directory"], True)
@@ -110,7 +110,7 @@ class FetchArchiveTests(unittest.TestCase):
         with self.assertRaises(FetchArchiveError) as context:
             fetch_archive(
                 archive,
-                temporary_directory_root=self.temporary_root,
+                installation_path=self.temporary_root,
                 md5sum="0" * 32,
             )
 
@@ -125,7 +125,7 @@ class FetchArchiveTests(unittest.TestCase):
         with self.assertRaises(FetchArchiveError) as context:
             fetch_archive(
                 "missing.tar.gz",
-                temporary_directory_root=self.temporary_root,
+                installation_path=self.temporary_root,
                 md5sum="invalid",
             )
 
@@ -138,7 +138,7 @@ class FetchArchiveTests(unittest.TestCase):
             output.writestr("../escaped.txt", b"bad")
 
         with self.assertRaises(FetchArchiveError) as context:
-            fetch_archive(archive, temporary_directory_root=self.temporary_root)
+            fetch_archive(archive, installation_path=self.temporary_root)
 
         self.assertIn("unsafe path", str(context.exception))
         temporary_directory = context.exception.temporary_directory or ""
@@ -152,7 +152,7 @@ class FetchArchiveTests(unittest.TestCase):
             stream.write(b"not an archive")
 
         with self.assertRaises(FetchArchiveError) as context:
-            fetch_archive(source, temporary_directory_root=self.temporary_root)
+            fetch_archive(source, installation_path=self.temporary_root)
 
         self.assertIn("expected .tgz, .tar.gz, or .zip", str(context.exception))
         temporary_directory = context.exception.temporary_directory or ""

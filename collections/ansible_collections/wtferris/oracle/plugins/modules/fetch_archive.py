@@ -33,7 +33,7 @@ options:
       - Local path or C(file), C(http), or C(https) URL of a C(.tgz), C(.tar.gz), or C(.zip) archive.
     type: str
     required: true
-  temporary_directory_root:
+  installation_path:
     description:
       - Parent directory in which the temporary working directory is created.
       - Uses the operating system temporary directory when omitted.
@@ -62,7 +62,7 @@ EXAMPLES = r"""
 - name: Download and unpack an archive beneath /u01/tmp
   wtferris.oracle.fetch_archive:
     source_url: https://packages.example.com/product.tar.gz
-    temporary_directory_root: /u01/tmp
+    installation_path: /u01/tmp
     md5sum: 0123456789abcdef0123456789abcdef
   register: archive
 
@@ -109,7 +109,7 @@ def main():
     module = AnsibleModule(
         argument_spec={
             "source_url": {"type": "str", "required": True},
-            "temporary_directory_root": {"type": "path", "default": None},
+            "installation_path": {"type": "path", "default": None},
             "insecure": {"type": "bool", "default": False},
             "md5sum": {"type": "str", "default": None},
         },
@@ -119,7 +119,7 @@ def main():
     try:
         result = fetch_archive(
             source_url=module.params["source_url"],
-            temporary_directory_root=module.params["temporary_directory_root"],
+            installation_path=module.params["installation_path"],
             insecure=module.params["insecure"],
             md5sum=module.params["md5sum"],
         )
