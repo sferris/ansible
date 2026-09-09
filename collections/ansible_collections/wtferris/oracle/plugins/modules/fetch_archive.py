@@ -47,15 +47,28 @@ options:
   md5sum:
     description:
       - Optional expected 32-character MD5 checksum.
+      - When supplied, it is used as the archive cache identity.
     type: str
+  force:
+    description:
+      - Fetch and replace a completed cached archive instead of returning it unchanged.
+    type: bool
+    default: false
+  lock_timeout:
+    description:
+      - Maximum number of seconds to wait for another process fetching the same archive.
+    type: int
+    default: 300
 requirements:
   - Python 2.7 or newer
   - gzip and tar for gzip tar archives
   - unzip for ZIP archives
 notes:
   - Downloads are completed and checksums verified before extraction.
-  - The caller is responsible for removing the returned temporary directory.
-  - Temporary content is removed automatically if download, verification, or extraction fails.
+  - Completed archives are cached by expected MD5, or by normalized source URL when MD5 is omitted.
+  - Concurrent callers for the same archive are serialized with an atomic directory lock.
+  - The caller may remove the returned cache directory when it is no longer needed.
+  - Staging content is removed automatically if download, verification, or extraction fails.
 """
 
 EXAMPLES = r"""
@@ -64,6 +77,7 @@ EXAMPLES = r"""
     source_url: https://packages.example.com/product.tar.gz
     installation_path: /u01/tmp
     md5sum: 0123456789abcdef0123456789abcdef
+    lock_timeout: 300
   register: archive
 
 - name: Show unpacked top-level entries
@@ -86,7 +100,7 @@ errors:
   type: list
   elements: str
 temporary_directory:
-  description: Preserved temporary working directory containing the archive and extraction directory.
+  description: Preserved cache directory containing the extraction directory and completion marker. The downloaded archive is removed after extraction.
   returned: success
   type: str
 unpack_directory:
@@ -99,7 +113,7 @@ contents:
   type: list
   elements: str
 changed:
-  description: Whether the archive was downloaded and unpacked.
+  description: Whether the archive was downloaded and unpacked rather than returned from cache.
   returned: success
   type: bool
 """
@@ -112,6 +126,8 @@ def main():
             "installation_path": {"type": "path", "default": None},
             "insecure": {"type": "bool", "default": False},
             "md5sum": {"type": "str", "default": None},
+            "force": {"type": "bool", "default": False},
+            "lock_timeout": {"type": "int", "default": 300},
         },
         supports_check_mode=False,
     )
@@ -122,6 +138,8 @@ def main():
             installation_path=module.params["installation_path"],
             insecure=module.params["insecure"],
             md5sum=module.params["md5sum"],
+            force=module.params["force"],
+            lock_timeout=module.params["lock_timeout"],
         )
     except FetchArchiveError as exc:
         module.fail_json(

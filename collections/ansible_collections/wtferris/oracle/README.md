@@ -89,7 +89,9 @@ Download, checksum, and unpack a `.tgz`, `.tar.gz`, or `.zip` archive into prese
 
 The module calculates MD5 while downloading, verifies an optional expected checksum before extraction, and validates archive member paths. It uses operating-system `gzip`, `tar`, and `unzip` executables and supports local paths plus `file://`, `http://`, and `https://` sources.
 
-On success, `temporary_directory` is preserved for the caller and `unpack_directory` identifies its `extract` directory. `contents` contains the sorted names at the root of `unpack_directory`; archives may contain one or multiple top-level entries. The caller is responsible for cleaning up the temporary directory. Failures clean it automatically.
+Completed archives use a deterministic cache directory beneath `installation_path`. The expected MD5 is the preferred cache identity; when omitted, a SHA-256 hash of the normalized source URL is used. Atomic directory locks serialize concurrent callers, and a `.complete` marker prevents partially extracted content from being returned. Cache hits return `changed: false`; use `force: true` to refresh one. `lock_timeout` controls how long a caller waits for another fetch of the same archive.
+
+On success, `temporary_directory` identifies the completed cache and `unpack_directory` identifies its `extract` directory. The downloaded archive is removed after successful extraction to conserve space. `contents` contains the sorted names at the root of `unpack_directory`; archives may contain one or multiple top-level entries. The caller may remove the cache directory when it is no longer needed. Failed staging directories are cleaned automatically.
 
 The implementation is reusable by other collection modules:
 
