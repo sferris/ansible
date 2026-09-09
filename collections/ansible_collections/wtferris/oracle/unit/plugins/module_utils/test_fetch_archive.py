@@ -10,12 +10,12 @@ import tempfile
 import unittest
 import zipfile
 
-from plugins.module_utils.archive_unpack import ArchiveUnpackError, unpack_archive
+from plugins.module_utils.fetch_archive import FetchArchiveError, fetch_archive
 
 
-class ArchiveUnpackTests(unittest.TestCase):
+class FetchArchiveTests(unittest.TestCase):
     def setUp(self):
-        self.root = tempfile.mkdtemp(prefix="archive-unpack-test-")
+        self.root = tempfile.mkdtemp(prefix="fetch-archive-test-")
         self.temporary_root = os.path.join(self.root, "temporary")
         os.mkdir(self.temporary_root)
 
@@ -51,7 +51,7 @@ class ArchiveUnpackTests(unittest.TestCase):
     def test_unpacks_tar_and_preserves_temporary_directory(self):
         archive = self._tar()
 
-        result = unpack_archive(archive, temporary_directory_root=self.temporary_root)
+        result = fetch_archive(archive, temporary_directory_root=self.temporary_root)
         self.addCleanup(shutil.rmtree, result["temporary_directory"], True)
 
         self.assertTrue(result["changed"])
@@ -73,7 +73,7 @@ class ArchiveUnpackTests(unittest.TestCase):
     def test_returns_multiple_top_level_entries(self):
         archive = self._tar(names=("one", "two"))
 
-        result = unpack_archive(archive, temporary_directory_root=self.temporary_root)
+        result = fetch_archive(archive, temporary_directory_root=self.temporary_root)
         self.addCleanup(shutil.rmtree, result["temporary_directory"], True)
 
         self.assertEqual(result["contents"], ["one", "two"])
@@ -81,7 +81,7 @@ class ArchiveUnpackTests(unittest.TestCase):
     def test_unpacks_zip_from_file_url(self):
         archive = self._zip()
 
-        result = unpack_archive(
+        result = fetch_archive(
             "file://" + archive,
             temporary_directory_root=self.temporary_root,
         )
@@ -95,7 +95,7 @@ class ArchiveUnpackTests(unittest.TestCase):
     def test_accepts_matching_md5(self):
         archive = self._tar()
 
-        result = unpack_archive(
+        result = fetch_archive(
             archive,
             temporary_directory_root=self.temporary_root,
             md5sum=self._md5(archive).upper(),
@@ -107,8 +107,8 @@ class ArchiveUnpackTests(unittest.TestCase):
     def test_checksum_mismatch_reports_checksum_and_cleans_up(self):
         archive = self._tar()
 
-        with self.assertRaises(ArchiveUnpackError) as context:
-            unpack_archive(
+        with self.assertRaises(FetchArchiveError) as context:
+            fetch_archive(
                 archive,
                 temporary_directory_root=self.temporary_root,
                 md5sum="0" * 32,
@@ -122,8 +122,8 @@ class ArchiveUnpackTests(unittest.TestCase):
         self.assertIn("checksum mismatch", str(error).lower())
 
     def test_invalid_md5_is_rejected_before_creating_temporary_directory(self):
-        with self.assertRaises(ArchiveUnpackError) as context:
-            unpack_archive(
+        with self.assertRaises(FetchArchiveError) as context:
+            fetch_archive(
                 "missing.tar.gz",
                 temporary_directory_root=self.temporary_root,
                 md5sum="invalid",
@@ -137,8 +137,8 @@ class ArchiveUnpackTests(unittest.TestCase):
         with zipfile.ZipFile(archive, "w") as output:
             output.writestr("../escaped.txt", b"bad")
 
-        with self.assertRaises(ArchiveUnpackError) as context:
-            unpack_archive(archive, temporary_directory_root=self.temporary_root)
+        with self.assertRaises(FetchArchiveError) as context:
+            fetch_archive(archive, temporary_directory_root=self.temporary_root)
 
         self.assertIn("unsafe path", str(context.exception))
         temporary_directory = context.exception.temporary_directory or ""
@@ -151,8 +151,8 @@ class ArchiveUnpackTests(unittest.TestCase):
         with open(source, "wb") as stream:
             stream.write(b"not an archive")
 
-        with self.assertRaises(ArchiveUnpackError) as context:
-            unpack_archive(source, temporary_directory_root=self.temporary_root)
+        with self.assertRaises(FetchArchiveError) as context:
+            fetch_archive(source, temporary_directory_root=self.temporary_root)
 
         self.assertIn("expected .tgz, .tar.gz, or .zip", str(context.exception))
         temporary_directory = context.exception.temporary_directory or ""

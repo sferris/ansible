@@ -71,13 +71,13 @@ Versions are normalized to five positions. For example, `12.1.0.2` becomes `12.1
 
 This module is independent of discovery and only runs when explicitly invoked with an `oracle_home`.
 
-### `wtferris.oracle.archive_unpack`
+### `wtferris.oracle.fetch_archive`
 
 Download, checksum, and unpack a `.tgz`, `.tar.gz`, or `.zip` archive into preserved temporary storage without performing installation or relocation:
 
 ```yaml
 - name: Download and unpack beneath /u01/tmp
-  wtferris.oracle.archive_unpack:
+  wtferris.oracle.fetch_archive:
     temporary_directory_root: /u01/tmp
     source_url: https://packages.example.com/product.tar.gz
     md5sum: 0123456789abcdef0123456789abcdef
@@ -94,7 +94,7 @@ On success, `temporary_directory` is preserved for the caller and `unpack_direct
 The implementation is reusable by other collection modules:
 
 ```python
-from ansible_collections.wtferris.oracle.plugins.module_utils.archive_unpack import unpack_archive
+from ansible_collections.wtferris.oracle.plugins.module_utils.fetch_archive import fetch_archive
 ```
 
 ## Requirements

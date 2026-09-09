@@ -7,16 +7,16 @@
 from __future__ import absolute_import, division, print_function
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.wtferris.oracle.plugins.module_utils.archive_unpack import (
-    ArchiveUnpackError,
-    unpack_archive,
+from ansible_collections.wtferris.oracle.plugins.module_utils.fetch_archive import (
+    FetchArchiveError,
+    fetch_archive,
 )
 
 __metaclass__ = type
 
 DOCUMENTATION = r"""
 ---
-module: archive_unpack
+module: fetch_archive
 short_description: Download and unpack an archive into temporary storage
 version_added: "1.0.0"
 description:
@@ -24,7 +24,7 @@ description:
   - Calculates and optionally verifies its MD5 checksum before extraction.
   - Uses the operating system C(gzip), C(tar), and C(unzip) executables.
   - Preserves the temporary directory so another task or module can process the unpacked contents.
-  - The implementation is also available from the collection's C(archive_unpack) module utility.
+  - The implementation is also available from the collection's C(fetch_archive) module utility.
 author:
   - wtferris
 options:
@@ -60,7 +60,7 @@ notes:
 
 EXAMPLES = r"""
 - name: Download and unpack an archive beneath /u01/tmp
-  wtferris.oracle.archive_unpack:
+  wtferris.oracle.fetch_archive:
     source_url: https://packages.example.com/product.tar.gz
     temporary_directory_root: /u01/tmp
     md5sum: 0123456789abcdef0123456789abcdef
@@ -117,13 +117,13 @@ def main():
     )
 
     try:
-        result = unpack_archive(
+        result = fetch_archive(
             source_url=module.params["source_url"],
             temporary_directory_root=module.params["temporary_directory_root"],
             insecure=module.params["insecure"],
             md5sum=module.params["md5sum"],
         )
-    except ArchiveUnpackError as exc:
+    except FetchArchiveError as exc:
         module.fail_json(
             msg=str(exc),
             md5sum=exc.md5sum or "",

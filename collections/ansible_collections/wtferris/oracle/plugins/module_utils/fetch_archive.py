@@ -27,13 +27,13 @@ except ImportError:  # pragma: no cover - Python 2
     urlopen = _urllib2.urlopen
 
 
-class ArchiveUnpackError(Exception):
+class FetchArchiveError(Exception):
     """An archive could not be downloaded, verified, or unpacked."""
 
     def __init__(self, message, md5sum=None, temporary_directory=None):
         self.md5sum = md5sum
         self.temporary_directory = temporary_directory
-        super(ArchiveUnpackError, self).__init__(message)
+        super(FetchArchiveError, self).__init__(message)
 
 
 def _open_source(source_url, insecure):
@@ -53,7 +53,7 @@ def _open_source(source_url, insecure):
         if parsed.netloc and parsed.netloc not in ("", "localhost"):
             path = "//%s%s" % (parsed.netloc, path)
     elif parsed.scheme:
-        raise ArchiveUnpackError("Unsupported source URL scheme: %s" % parsed.scheme)
+        raise FetchArchiveError("Unsupported source URL scheme: %s" % parsed.scheme)
     else:
         path = source_url
     return open(path, "rb")
@@ -65,7 +65,7 @@ def _archive_kind(source_url):
         return "tar"
     if path.endswith(".zip"):
         return "zip"
-    raise ArchiveUnpackError(
+    raise FetchArchiveError(
         "Unsupported archive type for %s; expected .tgz, .tar.gz, or .zip" % source_url
     )
 
@@ -80,10 +80,10 @@ def _run(command):
         )
         stdout, stderr = process.communicate()
     except OSError as exc:
-        raise ArchiveUnpackError("Unable to execute %s: %s" % (command[0], exc))
+        raise FetchArchiveError("Unable to execute %s: %s" % (command[0], exc))
     if process.returncode:
         detail = (stderr or stdout or "no diagnostic output").strip()
-        raise ArchiveUnpackError(
+        raise FetchArchiveError(
             "Command %r failed with exit status %s: %s"
             % (command, process.returncode, detail)
         )
@@ -113,14 +113,14 @@ def _tar(command, archive, extract_directory=None):
         tar_stdout, tar_stderr = tar_process.communicate()
         gzip_stderr = gzip_process.communicate()[1]
     except OSError as exc:
-        raise ArchiveUnpackError("Unable to execute gzip/tar: %s" % exc)
+        raise FetchArchiveError("Unable to execute gzip/tar: %s" % exc)
     if gzip_process.returncode:
-        raise ArchiveUnpackError(
+        raise FetchArchiveError(
             "gzip failed with exit status %s: %s"
             % (gzip_process.returncode, gzip_stderr.decode("utf-8", "replace").strip())
         )
     if tar_process.returncode:
-        raise ArchiveUnpackError(
+        raise FetchArchiveError(
             "tar failed with exit status %s: %s"
             % (tar_process.returncode, (tar_stderr or "no diagnostic output").strip())
         )
@@ -136,18 +136,18 @@ def _validate_members(listing):
         drive, unused = os.path.splitdrive(name)
         normalized = posixpath.normpath(name)
         if drive or name.startswith("/") or normalized == ".." or normalized.startswith("../"):
-            raise ArchiveUnpackError("Archive contains unsafe path: %s" % raw_name)
+            raise FetchArchiveError("Archive contains unsafe path: %s" % raw_name)
         members.append(normalized)
     if not members:
-        raise ArchiveUnpackError("Archive is empty")
+        raise FetchArchiveError("Archive is empty")
     return members
 
 
-def unpack_archive(source_url, temporary_directory_root=None, insecure=False, md5sum=None):
+def fetch_archive(source_url, temporary_directory_root=None, insecure=False, md5sum=None):
     """Download, optionally verify, and unpack an archive into temporary storage."""
     expected_md5 = md5sum.lower() if md5sum else None
     if expected_md5 and not re.match(r"^[0-9a-f]{32}$", expected_md5):
-        raise ArchiveUnpackError("md5sum must contain exactly 32 hexadecimal characters")
+        raise FetchArchiveError("md5sum must contain exactly 32 hexadecimal characters")
 
     temporary_directory = None
     calculated_md5 = None
@@ -155,7 +155,7 @@ def unpack_archive(source_url, temporary_directory_root=None, insecure=False, md
         if temporary_directory_root and not os.path.isdir(temporary_directory_root):
             os.makedirs(temporary_directory_root)
         temporary_directory = tempfile.mkdtemp(
-            prefix="archive-unpack-",
+            prefix="fetch-archive-",
             dir=temporary_directory_root,
         )
         unpack_directory = os.path.join(temporary_directory, "extract")
@@ -185,7 +185,7 @@ def unpack_archive(source_url, temporary_directory_root=None, insecure=False, md
 
         calculated_md5 = digest.hexdigest()
         if expected_md5 and calculated_md5 != expected_md5:
-            raise ArchiveUnpackError(
+            raise FetchArchiveError(
                 "MD5 checksum mismatch: expected %s, got %s"
                 % (expected_md5, calculated_md5),
                 md5sum=calculated_md5,
@@ -212,7 +212,7 @@ def unpack_archive(source_url, temporary_directory_root=None, insecure=False, md
             "unpack_directory": unpack_directory,
             "contents": sorted(os.listdir(unpack_directory)),
         }
-    except ArchiveUnpackError as exc:
+    except FetchArchiveError as exc:
         failed_directory = temporary_directory
         if temporary_directory and os.path.isdir(temporary_directory):
             shutil.rmtree(temporary_directory)
@@ -225,7 +225,7 @@ def unpack_archive(source_url, temporary_directory_root=None, insecure=False, md
         failed_directory = temporary_directory
         if temporary_directory and os.path.isdir(temporary_directory):
             shutil.rmtree(temporary_directory)
-        raise ArchiveUnpackError(
+        raise FetchArchiveError(
             "Archive unpack failed: %s" % exc,
             md5sum=calculated_md5,
             temporary_directory=failed_directory,
