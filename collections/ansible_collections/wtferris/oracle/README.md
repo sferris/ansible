@@ -71,28 +71,30 @@ Versions are normalized to five positions. For example, `12.1.0.2` becomes `12.1
 
 This module is independent of discovery and only runs when explicitly invoked with an `oracle_home`.
 
-### `wtferris.oracle.package_install`
+### `wtferris.oracle.archive_unpack`
 
-Download, checksum, extract, and install a single-directory `.tgz`, `.tar.gz`, or `.zip` archive without placing temporary data beneath the remote user's home:
+Download, checksum, and unpack a `.tgz`, `.tar.gz`, or `.zip` archive into preserved temporary storage without performing installation or relocation:
 
 ```yaml
-- name: Install a package into /u01
-  wtferris.oracle.package_install:
-    installation_path: /u01/software
+- name: Download and unpack beneath /u01/tmp
+  wtferris.oracle.archive_unpack:
     temporary_directory_root: /u01/tmp
     source_url: https://packages.example.com/product.tar.gz
     md5sum: 0123456789abcdef0123456789abcdef
-  register: package
+  register: archive
+
+- ansible.builtin.debug:
+    var: archive.contents
 ```
 
-The module calculates MD5 while downloading, verifies an optional expected checksum before extraction, validates archive member paths, requires exactly one top-level directory, and records successful installations as `.MD5.md5` symlinks beneath `~/.package_installation` by default. It uses operating-system `gzip`, `tar`, and `unzip` executables and supports local paths plus `file://`, `http://`, and `https://` sources.
+The module calculates MD5 while downloading, verifies an optional expected checksum before extraction, and validates archive member paths. It uses operating-system `gzip`, `tar`, and `unzip` executables and supports local paths plus `file://`, `http://`, and `https://` sources.
 
-Set `skip_post_relocation: true` to retain the extracted package in the returned `temporary_directory`. Normal relocation also returns the temporary path for troubleshooting, but that directory is removed after success. Set `force: true` to bypass inventory idempotency and rename an existing destination to `<destination>.trash` before installing the replacement.
+On success, `temporary_directory` is preserved for the caller and `unpack_directory` identifies its `extract` directory. `contents` contains the sorted names at the root of `unpack_directory`; archives may contain one or multiple top-level entries. The caller is responsible for cleaning up the temporary directory. Failures clean it automatically.
 
 The implementation is reusable by other collection modules:
 
 ```python
-from ansible_collections.wtferris.oracle.plugins.module_utils.package_installer import install_package
+from ansible_collections.wtferris.oracle.plugins.module_utils.archive_unpack import unpack_archive
 ```
 
 ## Requirements

@@ -1,0 +1,45 @@
+Currently I use ansible.builtin.unarchive to download tarballs and zip files from a webserver. Unfortunately I'm unable
+to change the location where it initially downloads the archive to and it chooses a path beneath the users home directory.
+
+I would like to build a module utility under the collection namespace wtferris to replace this functionality.
+These are the features I would like to include:
+
+* This has to support python 2.4 and greater
+* I would like to avoid external python dependencies
+* Inputs:
+  * installation path
+  * temporary directory root path (default to installation path)
+  * source url for the archive (can be local or remote, eg: file://, http://, or https://)
+  * flag for insecure connections if https is choosen
+  * a flag to skip post relocation
+  * and md5sum value
+  * package inventory directory (defaulted to ~/.package_installation)
+  * a flag to force installation
+* The source archive can either be a gzip tar (file extentension is .tgz or .tar.gz) or a zip (file extension is .zip)
+* I would prefer to use the gzip, tar, and unzip utilities budled with the os to unpack the archive
+* I would like to create a temporary directory (using mtktemp) in the temporary directory root path. (Referd to tempdir
+  going forward)
+* A directory should be created underneath the tempdir named extract where the archive will be unpacked
+* If possible, I would like to stream the download directly into gzip/tar to exgtract it (this is not necessary for zip files
+  unless it can be done in a portable manner - primarily this will be used on Redhat variants 7.x and greater, it could
+  be useful for solaris 5.10 and greater tho)
+* While downloading, I would like to generate the md5sum value to optionally compare against the md5sum input value
+* If a failure is detected, or the md5sum doesn't match the input, the temporary directory and contents should be cleaned up
+  and an error should be raised
+* Once extracted, there should be only a single directory inside extract folder. If no errors are detected then the
+  directory should be moved to the installation directory and a symlink should be create in the package inventory with the
+  name .{md5sum value}.md5 which points to the directory that was moved to the installation directoy
+* It should be idempotent. If the input md5sum is found in the package inventory and the directory that it points to exists,
+  then assume the archive has been installed. Or if the extracted directory exists beneath the installation directory, also assume
+  the package was already installed. 
+
+I would like the utility to both be exposed to use in playbooks directly, but also by additional modules. The output should
+return the md5sum, a flag that it failed or not, any errors, the directory that was installed if the post install wasn't skipped,
+or the tempdir if post install was skipped.
+
+
+
+Could you change a few things:
+
+If package.tar.gz contains the directory linux-x64-blah, I would like the entire path to this directory return, eg: /u01/software/linux-x64-blah.
+Lastly, I think tempdir should always be returned even if the post relocation step is skipped.
