@@ -13,35 +13,13 @@
       debug:
         var: oracle
 
-    # - name: Read Oracle home versions
-    #   become: true
-    #   become_user: oracle
-    #   wtferris.oracle.home_version:
-    #     oracle_home: /u01/product/oracle/linux-x64-12.1.0.2.0-db-base
-    #     timeout: 120
-    #   register: oracle_version
-    # 
-    # - ansible.builtin.debug:
-    #     var: oracle_version
-
-    # - name: Read Oracle home versions
-    #   become: true
-    #   become_user: oracle
-    #   wtferris.oracle.home_version:
-    #     oracle_home: /u01/product/oracle/linux-x64-19.26.0.0.250121-db
-    #     timeout: 120
-    #   register: oracle_version
-    # 
-    # - ansible.builtin.debug:
-    #     var: oracle_version
-
     - name: Fetch package
       become: yes
       become_user: oracle
       wtferris.oracle.fetch_archive:
         installation_path: /u01/product/oracle
-        source_url: file:///u01/tmp/linux-x64-12.1.0.2.0-db-base.tar.gz
-        md5sum: 03eaac0b8040df41548128143c8d245c
+        source_url: http://dbahub.wtferris.net/download/linux/x86-64/oracle-db/19.0.0.0/linux-x64-19.8.0.0.200714-db.tar.gz
+        md5sum: 9b8ce4e47701204dcd26632d266aa19e
         insecure: false
         #force: false
       register: package
@@ -49,3 +27,24 @@
 
     - ansible.builtin.debug:
         var: package
+
+    - name: Read Oracle home information
+      wtferris.oracle.home_info:
+        oracle_home: /u01/product/oracle/fetch-archive-md5-9b8ce4e47701204dcd26632d266aa19e/extract/linux-x64-19.8.0.0.200714-db
+      register: oracle_home
+
+    - ansible.builtin.debug:
+        var: oracle_home
+
+
+    # - name: Read Oracle home versions
+    #   become: true
+    #   become_user: oracle
+    #   wtferris.oracle.opatch_version:
+    #     oracle_home: /u01/product/oracle/linux-x64-19.26.0.0.250121-db
+    #     timeout: 120
+    #   register: oracle_version
+    # 
+    # - ansible.builtin.debug:
+    #     var: oracle_version
+

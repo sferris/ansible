@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from plugins.module_utils.oracle_command import CommandResult
-from plugins.module_utils.oracle_home_version import (
+from plugins.module_utils.oracle_opatch_info import (
     OracleHomeVersionError,
     get_oracle_home_versions,
     normalize_oracle_version,

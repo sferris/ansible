@@ -12,14 +12,16 @@ from plugins.module_utils.oracle_discovery import (
     OracleDiscovery,
     crsctl_get_hostname,
     crsctl_stat_resources,
-    normalize_oracle_datetime,
     path_is_within,
-    parse_comps_xml,
     parse_crsctl_sections,
     parse_environment_assignments,
     parse_inventory_xml,
     parse_listener_endpoints,
     parse_oratab,
+)
+from plugins.module_utils.home_info import (
+    normalize_oracle_datetime,
+    parse_comps_xml,
 )
 
 

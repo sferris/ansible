@@ -49,13 +49,27 @@ Custom software roots can be supplied when installations do not use the defaults
   register: oracle
 ```
 
-### `wtferris.oracle.home_version`
+### `wtferris.oracle.home_info`
+
+Read the same `comps.xml` component metadata used by discovery for one explicitly supplied Oracle home:
+
+```yaml
+- name: Read one Oracle home's component metadata
+  wtferris.oracle.home_info:
+    oracle_home: /u01/product/oracle/linux-x64-19.26.0.0.250121-db
+    software_homename: linux_x64_192600250121_db
+  register: oracle_home
+```
+
+The optional `software_homename` is useful when the central-inventory name is already known. If omitted, it is derived from the Oracle home directory basename by replacing dashes with underscores and removing periods. For example, `linux-x64-19.8.0.0.200714-db` becomes `linux_x64_19800200714_db`. Discovery reuses the same utility and supplies names found in central `inventory.xml`.
+
+### `wtferris.oracle.opatch_version`
 
 Run OPatch explicitly for one Oracle home and return the `oracle.server` base version and the highest `Database Release Update` patch version:
 
 ```yaml
 - name: Read Oracle home versions
-  wtferris.oracle.home_version:
+  wtferris.oracle.opatch_version:
     oracle_home: /u01/product/oracle/db19
   register: oracle_version
 

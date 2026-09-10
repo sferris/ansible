@@ -9,9 +9,9 @@ import os
 import re
 import shlex
 import xml.etree.ElementTree as ET
-from datetime import datetime
 
 from .oracle_command import EXECUTABLE_ERRORS, run_executable
+from .home_info import OracleHomeInfoError, get_oracle_home_info
 
 DEFAULT_GRID_ROOTS = ["/u01/product/grid"]
 DEFAULT_ORACLE_ROOTS = ["/u01/product/oracle"]
@@ -47,30 +47,6 @@ def path_is_within(path, root):
 def _local_name(tag):
     return tag.rsplit("}", 1)[-1]
 
-
-def normalize_oracle_datetime(value):
-    """Convert an Oracle inventory timestamp to an Ansible-friendly datetime string."""
-    value = (value or "").strip()
-    if not value:
-        return ""
-
-    # 2026.Mar.08 13:54:00 UTC
-    formats = (
-        "%Y.%b.%d %H:%M:%S %Z",
-        "%Y%m%d.%H%M%S",
-        "%Y-%m-%d_%I-%M-%S%p",
-        "%Y-%m-%d_%H-%M-%S",
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%dT%H:%M:%S",
-        "%Y-%m-%d",
-    )
-    for timestamp_format in formats:
-        try:
-            parsed = datetime.strptime(value, timestamp_format)
-            return parsed.strftime("%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            continue
-    return ""
 
 
 def _new_instance(name=""):
@@ -176,42 +152,6 @@ def parse_inventory_xml(path):
             })
     return homes
 
-
-def parse_comps_xml(path):
-    """Extract the requested component metadata from an Oracle comps.xml file."""
-    try:
-        root = ET.parse(path).getroot()
-    except (ET.ParseError, IOError, OSError):
-        return {}
-
-    candidates = []
-    for product_list in root.iter():
-        if _local_name(product_list.tag) != "PRD_LIST":
-            continue
-        for technology_list in product_list.iter():
-            if _local_name(technology_list.tag) != "TL_LIST":
-                continue
-            candidates.extend(
-                element for element in technology_list.iter()
-                if _local_name(element.tag) == "COMP"
-            )
-
-    if not candidates:
-        candidates = [element for element in root.iter() if _local_name(element.tag) == "COMP"]
-    if not candidates:
-        return {}
-
-    component = candidates[0]
-    software_build = component.attrib.get("BUILD_TIME", "").strip()
-    software_installed = component.attrib.get("INSTALL_TIME", "").strip()
-    return {
-        "software_type": component.attrib.get("NAME", "").strip(),
-        "software_version": component.attrib.get("VER", "").strip(),
-        "software_build": software_build,
-        "software_build_date": normalize_oracle_datetime(software_build),
-        "software_installed": software_installed,
-        "software_installed_date": normalize_oracle_datetime(software_installed),
-    }
 
 
 def parse_oratab(path):
@@ -409,8 +349,13 @@ class OracleDiscovery(object):
                 self._add_software_home(home)
 
         for record in self.details["software_homes"].values():
-            comps_path = os.path.join(record["software_home"], "inventory", "ContentsXML", "comps.xml")
-            record.update(parse_comps_xml(comps_path))
+            try:
+                record.update(get_oracle_home_info(
+                    record["software_home"],
+                    software_homename=record["software_homename"],
+                ))
+            except OracleHomeInfoError:
+                continue
 
     def _process_arguments(self, pid):
         cmdline_path = os.path.join(self.proc_root, str(pid), "cmdline")

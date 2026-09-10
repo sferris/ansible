@@ -7,7 +7,7 @@
 from __future__ import absolute_import, division, print_function
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.wtferris.oracle.plugins.module_utils.oracle_home_version import (
+from ansible_collections.wtferris.oracle.plugins.module_utils.oracle_opatch_info import (
     OracleHomeVersionError,
     get_oracle_home_versions,
 )
@@ -16,7 +16,7 @@ __metaclass__ = type
 
 DOCUMENTATION = r"""
 ---
-module: home_version
+module: opatch_version
 short_description: Get Oracle Database versions from an Oracle home
 version_added: "1.0.0"
 description:
@@ -46,7 +46,7 @@ notes:
 
 EXAMPLES = r"""
 - name: Read versions from one Oracle home
-  wtferris.oracle.home_version:
+  wtferris.oracle.opatch_version:
     oracle_home: /u01/product/oracle/db19
   register: oracle_version
 
