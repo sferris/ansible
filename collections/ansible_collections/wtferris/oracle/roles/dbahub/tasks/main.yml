@@ -1,0 +1,73 @@
+---
+- name: Validate dbahub role inputs
+  ansible.builtin.assert:
+    that:
+      - dbahub_url | length > 0
+      - dbahub_operation in ['health', 'authenticate', 'search_by_md5', 'releases', 'packages', 'package', 'upload', 'symlink']
+    fail_msg: >-
+      dbahub_url is required and dbahub_operation must be health, authenticate,
+      search_by_md5, releases, packages, package, upload, or symlink.
+
+- name: Normalize dbahub base URL
+  ansible.builtin.set_fact:
+    dbahub_base_url: "{{ dbahub_url | regex_replace('/+$', '') }}"
+
+- name: Validate MD5 search input
+  ansible.builtin.assert:
+    that:
+      - dbahub_md5 is match('^[0-9A-Fa-f]{32}$')
+    fail_msg: dbahub_md5 must contain exactly 32 hexadecimal characters.
+  when: dbahub_operation == 'search_by_md5'
+
+- name: Validate upload input
+  ansible.builtin.assert:
+    that:
+      - dbahub_package_path | length > 0
+      - not (dbahub_update_symlink | bool) or dbahub_symlink_name != dbahub_package
+    fail_msg: >-
+      dbahub_package_path is required for upload, and dbahub_symlink_name must
+      differ from dbahub_package when dbahub_update_symlink is enabled.
+  when: dbahub_operation == 'upload'
+
+- name: Validate symlink input
+  ansible.builtin.assert:
+    that:
+      - dbahub_symlink_target | length > 0
+    fail_msg: dbahub_symlink_target is required for the symlink operation.
+  when: dbahub_operation == 'symlink'
+
+- name: Determine whether dbahub authentication is required
+  ansible.builtin.set_fact:
+    dbahub_authentication_required: >-
+      {{ dbahub_operation == 'authenticate' or
+         (dbahub_operation in ['upload', 'symlink'] and dbahub_access_token | length == 0) }}
+
+- name: Validate dbahub authentication inputs
+  ansible.builtin.assert:
+    that:
+      - dbahub_client_id | length > 0
+      - dbahub_client_secret | length > 0
+    fail_msg: dbahub_client_id and dbahub_client_secret are required to authenticate.
+  when: dbahub_authentication_required | bool
+  no_log: true
+
+- name: Authenticate to dbahub
+  ansible.builtin.include_tasks: authenticate.yml
+  when: dbahub_authentication_required | bool
+
+- name: Build dbahub request headers
+  ansible.builtin.set_fact:
+    dbahub_request_headers: >-
+      {{ {'Authorization': 'Bearer ' ~ dbahub_access_token}
+         if dbahub_access_token | length > 0 else {} }}
+  no_log: "{{ dbahub_access_token | length > 0 }}"
+
+- name: Return authentication result
+  ansible.builtin.set_fact:
+    dbahub_result: "{{ dbahub_authentication }}"
+  when: dbahub_operation == 'authenticate'
+  no_log: true
+
+- name: Execute requested dbahub operation
+  ansible.builtin.include_tasks: "{{ dbahub_operation }}.yml"
+  when: dbahub_operation != 'authenticate'

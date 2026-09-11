@@ -1,0 +1,22 @@
+---
+- name: Create or update dbahub package symlink
+  ansible.builtin.uri:
+    url: >-
+      {{ dbahub_base_url }}/api/v2/oses/{{ dbahub_os | urlencode
+      }}/architectures/{{ dbahub_arch | urlencode }}/types/{{ dbahub_type | urlencode
+      }}/releases/{{ dbahub_release | urlencode }}/packages/{{ dbahub_package | urlencode }}/symlink
+    method: PUT
+    headers: "{{ dbahub_request_headers }}"
+    body_format: json
+    body:
+      target: "{{ dbahub_symlink_target }}"
+    return_content: true
+    status_code: 201
+    validate_certs: "{{ dbahub_validate_certs }}"
+    timeout: "{{ dbahub_timeout }}"
+  register: dbahub_response
+  changed_when: dbahub_response.status == 201
+
+- name: Return dbahub symlink result
+  ansible.builtin.set_fact:
+    dbahub_result: "{{ dbahub_response.json }}"

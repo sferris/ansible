@@ -1,0 +1,21 @@
+---
+dbahub_operation: health
+dbahub_url: ""
+dbahub_validate_certs: true
+dbahub_timeout: 30
+
+dbahub_client_id: ""
+dbahub_client_secret: ""
+dbahub_access_token: ""
+
+dbahub_os: "{{ ansible_facts['system'] | default('linux', true) | lower }}"
+dbahub_arch: "{{ ansible_facts['architecture'] | default('x86_64', true) | lower }}"
+dbahub_type: oracle-database
+dbahub_release: latest
+dbahub_package: latest.tar.gz
+
+dbahub_md5: ""
+dbahub_package_path: ""
+dbahub_update_symlink: false
+dbahub_symlink_name: latest.tar.gz
+dbahub_symlink_target: ""

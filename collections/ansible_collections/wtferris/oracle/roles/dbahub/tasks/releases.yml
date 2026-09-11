@@ -1,0 +1,17 @@
+---
+- name: List dbahub releases
+  ansible.builtin.uri:
+    url: >-
+      {{ dbahub_base_url }}/api/v2/oses/{{ dbahub_os | urlencode
+      }}/architectures/{{ dbahub_arch | urlencode }}/types/{{ dbahub_type | urlencode }}/releases
+    method: GET
+    headers: "{{ dbahub_request_headers }}"
+    return_content: true
+    status_code: 200
+    validate_certs: "{{ dbahub_validate_certs }}"
+    timeout: "{{ dbahub_timeout }}"
+  register: dbahub_response
+
+- name: Return dbahub releases
+  ansible.builtin.set_fact:
+    dbahub_result: "{{ dbahub_response.json }}"

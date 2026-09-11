@@ -1,0 +1,67 @@
+---
+- name: Inspect package for dbahub upload
+  ansible.builtin.stat:
+    path: "{{ dbahub_package_path }}"
+    checksum_algorithm: md5
+    get_checksum: true
+  register: dbahub_upload_file
+
+- name: Validate package upload file
+  ansible.builtin.assert:
+    that:
+      - dbahub_upload_file.stat.exists
+      - dbahub_upload_file.stat.isreg
+    fail_msg: "dbahub_package_path must identify an existing regular file: {{ dbahub_package_path }}"
+
+- name: Upload package to dbahub
+  ansible.builtin.uri:
+    url: >-
+      {{ dbahub_base_url }}/api/v2/oses/{{ dbahub_os | urlencode
+      }}/architectures/{{ dbahub_arch | urlencode }}/types/{{ dbahub_type | urlencode
+      }}/releases/{{ dbahub_release | urlencode }}/packages/{{ dbahub_package | urlencode }}
+    method: PUT
+    headers: >-
+      {{ dbahub_request_headers | combine({
+           'Content-Type': 'application/octet-stream',
+           'X-Checksum-MD5': dbahub_upload_file.stat.checksum
+         }) }}
+    src: "{{ dbahub_package_path }}"
+    remote_src: true
+    return_content: true
+    status_code:
+      - 201
+      - 204
+    validate_certs: "{{ dbahub_validate_certs }}"
+    timeout: "{{ dbahub_timeout }}"
+  register: dbahub_upload_response
+  changed_when: dbahub_upload_response.status in [201, 204]
+
+- name: Update symlink to uploaded dbahub package
+  ansible.builtin.uri:
+    url: >-
+      {{ dbahub_base_url }}/api/v2/oses/{{ dbahub_os | urlencode
+      }}/architectures/{{ dbahub_arch | urlencode }}/types/{{ dbahub_type | urlencode
+      }}/releases/{{ dbahub_release | urlencode }}/packages/{{ dbahub_symlink_name | urlencode }}/symlink
+    method: PUT
+    headers: "{{ dbahub_request_headers }}"
+    body_format: json
+    body:
+      target: "{{ dbahub_package }}"
+    return_content: true
+    status_code: 201
+    validate_certs: "{{ dbahub_validate_certs }}"
+    timeout: "{{ dbahub_timeout }}"
+  register: dbahub_upload_symlink_response
+  changed_when: dbahub_upload_symlink_response.status == 201
+  when: dbahub_update_symlink | bool
+
+- name: Return dbahub upload result
+  ansible.builtin.set_fact:
+    dbahub_result:
+      status: "{{ dbahub_upload_response.status }}"
+      package: "{{ dbahub_package }}"
+      md5: "{{ dbahub_upload_file.stat.checksum }}"
+      location: "{{ dbahub_upload_response.location | default('') }}"
+      symlink: >-
+        {{ dbahub_upload_symlink_response.json
+           if dbahub_update_symlink | bool else {} }}

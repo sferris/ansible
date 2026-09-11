@@ -1,0 +1,14 @@
+---
+- name: Check dbahub health
+  ansible.builtin.uri:
+    url: "{{ dbahub_base_url }}/healthz"
+    method: GET
+    return_content: true
+    status_code: 200
+    validate_certs: "{{ dbahub_validate_certs }}"
+    timeout: "{{ dbahub_timeout }}"
+  register: dbahub_response
+
+- name: Return dbahub health
+  ansible.builtin.set_fact:
+    dbahub_result: "{{ dbahub_response.json }}"

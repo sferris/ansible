@@ -1,0 +1,23 @@
+---
+- name: Request dbahub OAuth token
+  ansible.builtin.uri:
+    url: "{{ dbahub_base_url }}/oauth/token"
+    method: POST
+    url_username: "{{ dbahub_client_id }}"
+    url_password: "{{ dbahub_client_secret }}"
+    force_basic_auth: true
+    body_format: form-urlencoded
+    body:
+      grant_type: client_credentials
+    return_content: true
+    status_code: 200
+    validate_certs: "{{ dbahub_validate_certs }}"
+    timeout: "{{ dbahub_timeout }}"
+  register: dbahub_auth_response
+  no_log: true
+
+- name: Save dbahub OAuth token
+  ansible.builtin.set_fact:
+    dbahub_access_token: "{{ dbahub_auth_response.json.access_token }}"
+    dbahub_authentication: "{{ dbahub_auth_response.json }}"
+  no_log: true

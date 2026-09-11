@@ -1,0 +1,33 @@
+---
+- name: List dbahub release packages for package lookup
+  ansible.builtin.uri:
+    url: >-
+      {{ dbahub_base_url }}/api/v2/oses/{{ dbahub_os | urlencode
+      }}/architectures/{{ dbahub_arch | urlencode }}/types/{{ dbahub_type | urlencode
+      }}/releases/{{ dbahub_release | urlencode }}/packages
+    method: GET
+    headers: "{{ dbahub_request_headers }}"
+    return_content: true
+    status_code: 200
+    validate_certs: "{{ dbahub_validate_certs }}"
+    timeout: "{{ dbahub_timeout }}"
+  register: dbahub_response
+
+- name: Select requested dbahub package
+  ansible.builtin.set_fact:
+    dbahub_package_matches: >-
+      {{ dbahub_response.json['items']
+         | selectattr('item', 'equalto', dbahub_package)
+         | list }}
+
+- name: Validate requested dbahub package exists
+  ansible.builtin.assert:
+    that:
+      - dbahub_package_matches | length > 0
+    fail_msg: >-
+      Package {{ dbahub_package }} was not found for
+      {{ dbahub_os }}/{{ dbahub_arch }}/{{ dbahub_type }}/{{ dbahub_release }}.
+
+- name: Return requested dbahub package
+  ansible.builtin.set_fact:
+    dbahub_result: "{{ dbahub_package_matches | first }}"
