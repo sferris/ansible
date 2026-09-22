@@ -1,0 +1,4 @@
+---
+- name: Fail integration verifier intentionally
+  ansible.builtin.fail:
+    msg: intentional verifier failure

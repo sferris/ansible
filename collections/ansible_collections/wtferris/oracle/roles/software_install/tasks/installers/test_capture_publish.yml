@@ -1,0 +1,7 @@
+---
+- name: Capture complete package result for integration verification
+  ansible.builtin.set_fact:
+    software_test_installer_package: "{{ package }}"
+
+- name: Publish integration fixture directory
+  ansible.builtin.include_tasks: publish_directory.yml

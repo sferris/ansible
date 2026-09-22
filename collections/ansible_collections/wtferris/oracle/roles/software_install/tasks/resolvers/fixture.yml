@@ -1,0 +1,15 @@
+---
+- name: Validate fixture metadata
+  ansible.builtin.assert:
+    that:
+      - software_fixture_package_metadata.name | default('') | length > 0
+      - software_fixture_package_metadata.type | default('') | length > 0
+      - software_fixture_package_metadata.url | default('') | length > 0
+      - software_fixture_package_metadata.md5sum | default('') | length > 0
+    fail_msg: software_fixture_package_metadata must provide name, type, url, and md5sum.
+
+- name: Publish fixture package resolver contract
+  ansible.builtin.set_fact:
+    package_url: "{{ software_fixture_package_metadata.url }}"
+    package_md5sum: "{{ software_fixture_package_metadata.md5sum }}"
+    software_resolved_package: "{{ software_fixture_package_metadata }}"

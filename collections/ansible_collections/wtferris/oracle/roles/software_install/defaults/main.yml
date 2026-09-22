@@ -1,0 +1,12 @@
+---
+software_package: {}
+software_metadata_resolver_tasks_file: resolvers/dbahub.yml
+software_registration_directory: "{{ ansible_user_dir }}/.packages"
+software_cleanup_temporary_directory: false
+software_repair_invalid_registration: false
+software_fetch_installation_path: ""
+software_fetch_force: false
+software_fetch_lock_timeout: 300
+software_install_lock_retries: 60
+software_install_lock_delay: 5
+software_fixture_package_metadata: {}

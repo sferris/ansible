@@ -1,0 +1,44 @@
+---
+- name: Exercise software installation role check mode
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: true
+  vars:
+    test_root: /tmp/wtferris-oracle-software-install-check-test
+    test_md5: 0123456789abcdef0123456789abcdef
+  tasks:
+    - name: Predict an absent package installation
+      ansible.builtin.include_role:
+        name: wtferris.oracle.software_install
+      vars:
+        software_metadata_resolver_tasks_file: resolvers/fixture.yml
+        software_fixture_package_metadata:
+          name: fixture.tar.gz
+          type: test-package
+          url: /tmp/nonexistent-fixture.tar.gz
+          md5sum: "{{ test_md5 }}"
+        software_registration_directory: "{{ test_root }}/registrations"
+        software_package:
+          name: check-mode
+          installation_directory: "{{ test_root }}/installation"
+          installer_tasks_file: installers/publish_directory.yml
+
+    - name: Verify predictable check-mode result
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+          - software_install_result.changed
+          - not software_install_result.installed
+          - software_install_result.check_mode
+
+    - name: Inspect check-mode registration path
+      ansible.builtin.stat:
+        path: "{{ test_root }}/registrations/.{{ test_md5 }}-check-mode"
+        follow: false
+      register: test_check_registration
+
+    - name: Verify check mode did not register package
+      ansible.builtin.assert:
+        that:
+          - not test_check_registration.stat.exists | default(false) | bool

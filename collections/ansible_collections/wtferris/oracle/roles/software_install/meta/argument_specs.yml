@@ -1,0 +1,33 @@
+---
+argument_specs:
+  main:
+    short_description: Transactionally install and register archive software
+    options:
+      software_package:
+        type: dict
+        required: true
+      software_metadata_resolver_tasks_file:
+        type: str
+        default: resolvers/dbahub.yml
+      software_registration_directory:
+        type: path
+      software_cleanup_temporary_directory:
+        type: bool
+        default: false
+      software_repair_invalid_registration:
+        type: bool
+        default: false
+      software_fetch_installation_path:
+        type: path
+      software_fetch_force:
+        type: bool
+        default: false
+      software_fetch_lock_timeout:
+        type: int
+        default: 300
+      software_install_lock_retries:
+        type: int
+        default: 60
+      software_install_lock_delay:
+        type: int
+        default: 5

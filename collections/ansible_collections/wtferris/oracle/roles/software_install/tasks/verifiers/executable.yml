@@ -1,0 +1,15 @@
+---
+- name: Inspect installed executable artifact
+  ansible.builtin.stat:
+    path: "{{ software_package.verification_executable }}"
+  register: software_executable_verification
+
+- name: Verify installed executable artifact
+  ansible.builtin.assert:
+    that:
+      - software_executable_verification.stat.exists | default(false) | bool
+      - software_executable_verification.stat.isreg | default(false) | bool
+      - software_executable_verification.stat.executable | default(false) | bool
+    fail_msg: >-
+      Expected executable {{ software_package.verification_executable }} is
+      missing, not a regular file, or not executable.

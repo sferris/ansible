@@ -113,6 +113,16 @@ The implementation is reusable by other collection modules:
 from ansible_collections.wtferris.oracle.plugins.module_utils.fetch_archive import fetch_archive
 ```
 
+## Roles
+
+### `wtferris.oracle.software_install`
+
+Transactionally resolves package metadata, fetches an archive, invokes a role-local package installer, verifies the result, and commits an MD5-specific registration symlink. See [`roles/software_install/README.md`](roles/software_install/README.md) for extension contracts, examples, registration semantics, locking, cleanup, and testing.
+
+### `wtferris.oracle.dbahub`
+
+Provides operation-driven access to the supported dbahub health, authentication, package lookup, listing, upload, and symlink APIs. See [`roles/dbahub/README.md`](roles/dbahub/README.md).
+
 ## Requirements
 
 - Ansible Core 2.15 or newer

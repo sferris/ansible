@@ -1,0 +1,66 @@
+---
+- name: Validate simple archive layout
+  ansible.builtin.assert:
+    that:
+      - package.contents | length == 1
+    fail_msg: publish_directory requires exactly one top-level archive entry.
+
+- name: Inspect simple archive source directory
+  ansible.builtin.stat:
+    path: "{{ package.unpack_directory }}/{{ package.contents | first }}"
+  register: software_publish_source
+
+- name: Validate simple archive source directory
+  ansible.builtin.assert:
+    that:
+      - software_publish_source.stat.exists | default(false) | bool
+      - software_publish_source.stat.isdir | default(false) | bool
+    fail_msg: The archive's single top-level entry must be a directory.
+
+- name: Ensure installation parent exists
+  ansible.builtin.file:
+    path: "{{ software_installation_directory | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Define same-filesystem candidate directory
+  ansible.builtin.set_fact:
+    software_publish_candidate: >-
+      {{ software_installation_directory }}.candidate-{{ package.md5sum }}
+
+- name: Remove stale candidate from an interrupted attempt
+  ansible.builtin.file:
+    path: "{{ software_publish_candidate }}"
+    state: absent
+
+- name: Inspect final installation directory before publish
+  ansible.builtin.stat:
+    path: "{{ software_installation_directory }}"
+  register: software_publish_destination
+
+- name: Refuse to overwrite an unregistered installation directory
+  ansible.builtin.assert:
+    that:
+      - not software_publish_destination.stat.exists | default(false) | bool
+    fail_msg: >-
+      Installation directory {{ software_installation_directory }} already
+      exists without a valid registration. Refusing to overwrite it.
+
+- name: Build candidate from shared archive cache
+  ansible.builtin.command:
+    argv:
+      - cp
+      - -a
+      - "{{ package.unpack_directory }}/{{ package.contents | first }}"
+      - "{{ software_publish_candidate }}"
+  args:
+    creates: "{{ software_publish_candidate }}"
+
+- name: Publish candidate atomically on the same filesystem
+  ansible.builtin.command:
+    argv:
+      - mv
+      - "{{ software_publish_candidate }}"
+      - "{{ software_installation_directory }}"
+  args:
+    creates: "{{ software_installation_directory }}"

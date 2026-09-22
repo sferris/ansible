@@ -1,0 +1,4 @@
+---
+- name: Fail integration installer intentionally
+  ansible.builtin.fail:
+    msg: intentional installer failure

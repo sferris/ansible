@@ -1,0 +1,318 @@
+---
+- name: Exercise transactional software installation role
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: true
+  vars:
+    test_root: /tmp/wtferris-oracle-software-install-test
+    test_registration: "{{ test_root }}/registrations"
+    test_archive_v1: "{{ test_root }}/fixture-v1.tar.gz"
+    test_archive_v2: "{{ test_root }}/fixture-v2.tar.gz"
+  tasks:
+    - name: Reset integration fixture root
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent
+
+    - name: Create integration fixture directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ test_root }}/source-v1/product/bin"
+        - "{{ test_root }}/source-v2/product/bin"
+        - "{{ test_registration }}"
+
+    - name: Create version one artifact
+      ansible.builtin.copy:
+        dest: "{{ test_root }}/source-v1/product/bin/product"
+        content: "version one\n"
+        mode: "0755"
+
+    - name: Create version two artifact
+      ansible.builtin.copy:
+        dest: "{{ test_root }}/source-v2/product/bin/product"
+        content: "version two\n"
+        mode: "0755"
+
+    - name: Build local fixture archives
+      ansible.builtin.command:
+        argv:
+          - tar
+          - -czf
+          - "{{ item.archive }}"
+          - -C
+          - "{{ item.source }}"
+          - product
+        creates: "{{ item.archive }}"
+      loop:
+        - archive: "{{ test_archive_v1 }}"
+          source: "{{ test_root }}/source-v1"
+        - archive: "{{ test_archive_v2 }}"
+          source: "{{ test_root }}/source-v2"
+
+    - name: Calculate fixture checksums
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: md5
+        get_checksum: true
+      loop:
+        - "{{ test_archive_v1 }}"
+        - "{{ test_archive_v2 }}"
+      register: test_archive_stats
+
+    - name: Define fixture metadata
+      ansible.builtin.set_fact:
+        test_metadata_v1:
+          name: fixture-v1.tar.gz
+          type: test-package
+          url: "{{ test_archive_v1 }}"
+          md5sum: "{{ test_archive_stats.results[0].stat.checksum }}"
+        test_metadata_v2:
+          name: fixture-v2.tar.gz
+          type: test-package
+          url: "{{ test_archive_v2 }}"
+          md5sum: "{{ test_archive_stats.results[1].stat.checksum }}"
+
+    - name: Perform first installation
+      ansible.builtin.include_role:
+        name: wtferris.oracle.software_install
+      vars:
+        software_metadata_resolver_tasks_file: resolvers/fixture.yml
+        software_fixture_package_metadata: "{{ test_metadata_v1 }}"
+        software_registration_directory: "{{ test_registration }}"
+        software_package:
+          name: fixture
+          installation_directory: "{{ test_root }}/install-v1"
+          installer_tasks_file: installers/test_capture_publish.yml
+          verifier_tasks_file: verifiers/executable.yml
+          verification_executable: "{{ test_root }}/install-v1/bin/product"
+      register: test_first_install
+
+    - name: Verify first installation and complete package handoff
+      ansible.builtin.assert:
+        that:
+          - software_install_result.changed
+          - software_test_installer_package.md5sum == test_metadata_v1.md5sum
+          - software_test_installer_package.temporary_directory | length > 0
+          - software_test_installer_package.unpack_directory | length > 0
+          - software_test_installer_package.contents == ['product']
+          - software_install_result.installed
+
+    - name: Inspect first registration without following link
+      ansible.builtin.stat:
+        path: "{{ test_registration }}/.{{ test_metadata_v1.md5sum }}-fixture"
+        follow: false
+      register: test_first_registration
+
+    - name: Verify first registration link
+      ansible.builtin.assert:
+        that:
+          - test_first_registration.stat.islnk | default(false) | bool
+          - test_first_registration.stat.lnk_source == test_root ~ '/install-v1'
+
+    - name: Perform idempotent second installation
+      ansible.builtin.include_role:
+        name: wtferris.oracle.software_install
+      vars:
+        software_metadata_resolver_tasks_file: resolvers/fixture.yml
+        software_fixture_package_metadata: "{{ test_metadata_v1 }}"
+        software_registration_directory: "{{ test_registration }}"
+        software_package:
+          name: fixture
+          installation_directory: "{{ test_root }}/install-v1"
+          installer_tasks_file: installers/test_capture_publish.yml
+          verifier_tasks_file: verifiers/executable.yml
+          verification_executable: "{{ test_root }}/install-v1/bin/product"
+      register: test_second_install
+
+    - name: Verify second installation is idempotent
+      ansible.builtin.assert:
+        that:
+          - not software_install_result.changed
+
+    - name: Install changed MD5 as a distinct revision
+      ansible.builtin.include_role:
+        name: wtferris.oracle.software_install
+      vars:
+        software_metadata_resolver_tasks_file: resolvers/fixture.yml
+        software_fixture_package_metadata: "{{ test_metadata_v2 }}"
+        software_registration_directory: "{{ test_registration }}"
+        software_package:
+          name: fixture
+          installation_directory: "{{ test_root }}/install-v2"
+          installer_tasks_file: installers/publish_directory.yml
+
+    - name: Verify changed MD5 registration exists
+      ansible.builtin.stat:
+        path: "{{ test_registration }}/.{{ test_metadata_v2.md5sum }}-fixture"
+        follow: false
+      register: test_second_registration
+
+    - name: Assert changed MD5 created a new registration
+      ansible.builtin.assert:
+        that:
+          - test_second_registration.stat.islnk | default(false) | bool
+          - test_metadata_v1.md5sum != test_metadata_v2.md5sum
+
+    - name: Break valid registration target
+      ansible.builtin.file:
+        path: "{{ test_root }}/install-v2"
+        state: absent
+
+    - name: Reinstall a broken expected registration
+      ansible.builtin.include_role:
+        name: wtferris.oracle.software_install
+      vars:
+        software_metadata_resolver_tasks_file: resolvers/fixture.yml
+        software_fixture_package_metadata: "{{ test_metadata_v2 }}"
+        software_registration_directory: "{{ test_registration }}"
+        software_package:
+          name: fixture
+          installation_directory: "{{ test_root }}/install-v2"
+          installer_tasks_file: installers/publish_directory.yml
+
+    - name: Verify broken registration target was restored
+      ansible.builtin.stat:
+        path: "{{ test_root }}/install-v2/bin/product"
+      register: test_restored_artifact
+
+    - name: Assert broken registration was not treated as installed
+      ansible.builtin.assert:
+        that:
+          - test_restored_artifact.stat.exists | default(false) | bool
+
+    - name: Create wrong registration target
+      ansible.builtin.file:
+        path: "{{ test_root }}/wrong-target"
+        state: directory
+
+    - name: Create wrong registration symlink
+      ansible.builtin.file:
+        src: "{{ test_root }}/wrong-target"
+        dest: "{{ test_registration }}/.{{ test_metadata_v1.md5sum }}-wrong-link"
+        state: link
+
+    - name: Reject wrong registration symlink
+      block:
+        - name: Run role with wrong registration
+          ansible.builtin.include_role:
+            name: wtferris.oracle.software_install
+          vars:
+            software_metadata_resolver_tasks_file: resolvers/fixture.yml
+            software_fixture_package_metadata: "{{ test_metadata_v1 }}"
+            software_registration_directory: "{{ test_registration }}"
+            software_package:
+              name: wrong-link
+              installation_directory: "{{ test_root }}/expected-target"
+              installer_tasks_file: installers/publish_directory.yml
+
+        - name: Fail when wrong registration was accepted
+          ansible.builtin.fail:
+            msg: wrong-target registration unexpectedly succeeded
+      rescue:
+        - name: Verify wrong-target diagnostic
+          ansible.builtin.assert:
+            that:
+              - "'not an expected symlink' in ansible_failed_result.msg"
+
+    - name: Create ordinary registration file
+      ansible.builtin.copy:
+        dest: "{{ test_registration }}/.{{ test_metadata_v1.md5sum }}-ordinary-file"
+        content: invalid registration
+
+    - name: Reject ordinary registration file
+      block:
+        - name: Run role with ordinary registration file
+          ansible.builtin.include_role:
+            name: wtferris.oracle.software_install
+          vars:
+            software_metadata_resolver_tasks_file: resolvers/fixture.yml
+            software_fixture_package_metadata: "{{ test_metadata_v1 }}"
+            software_registration_directory: "{{ test_registration }}"
+            software_package:
+              name: ordinary-file
+              installation_directory: "{{ test_root }}/ordinary-install"
+              installer_tasks_file: installers/publish_directory.yml
+
+        - name: Fail when ordinary registration was accepted
+          ansible.builtin.fail:
+            msg: ordinary registration unexpectedly succeeded
+      rescue:
+        - name: Verify ordinary-file diagnostic
+          ansible.builtin.assert:
+            that:
+              - "'not an expected symlink' in ansible_failed_result.msg"
+
+    - name: Verify installer failure does not register
+      block:
+        - name: Run intentional installer failure
+          ansible.builtin.include_role:
+            name: wtferris.oracle.software_install
+          vars:
+            software_metadata_resolver_tasks_file: resolvers/fixture.yml
+            software_fixture_package_metadata: "{{ test_metadata_v1 }}"
+            software_registration_directory: "{{ test_registration }}"
+            software_package:
+              name: installer-failure
+              installation_directory: "{{ test_root }}/installer-failure"
+              installer_tasks_file: installers/test_fail.yml
+
+        - name: Fail when installer failure was ignored
+          ansible.builtin.fail:
+            msg: intentional installer failure unexpectedly succeeded
+      rescue:
+        - name: Inspect installer-failure registration
+          ansible.builtin.stat:
+            path: "{{ test_registration }}/.{{ test_metadata_v1.md5sum }}-installer-failure"
+            follow: false
+          register: test_installer_failure_registration
+
+        - name: Assert installer failure did not register
+          ansible.builtin.assert:
+            that:
+              - not test_installer_failure_registration.stat.exists | default(false) | bool
+
+    - name: Verify verifier failure and cleanup preserve original failure
+      block:
+        - name: Run intentional verifier failure with cleanup
+          ansible.builtin.include_role:
+            name: wtferris.oracle.software_install
+          vars:
+            software_metadata_resolver_tasks_file: resolvers/fixture.yml
+            software_fixture_package_metadata: "{{ test_metadata_v1 }}"
+            software_registration_directory: "{{ test_registration }}"
+            software_cleanup_temporary_directory: true
+            software_package:
+              name: verifier-failure
+              installation_directory: "{{ test_root }}/verifier-failure"
+              installer_tasks_file: installers/publish_directory.yml
+              verifier_tasks_file: verifiers/test_fail.yml
+
+        - name: Fail when verifier failure was ignored
+          ansible.builtin.fail:
+            msg: intentional verifier failure unexpectedly succeeded
+      rescue:
+        - name: Verify original verifier error survived cleanup
+          ansible.builtin.assert:
+            that:
+              - "'intentional verifier failure' in ansible_failed_result.msg"
+
+        - name: Inspect verifier-failure registration
+          ansible.builtin.stat:
+            path: "{{ test_registration }}/.{{ test_metadata_v1.md5sum }}-verifier-failure"
+            follow: false
+          register: test_verifier_failure_registration
+
+        - name: Assert verifier failure did not register
+          ansible.builtin.assert:
+            that:
+              - not test_verifier_failure_registration.stat.exists | default(false) | bool
+
+
+    - name: Remove integration fixture root
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent

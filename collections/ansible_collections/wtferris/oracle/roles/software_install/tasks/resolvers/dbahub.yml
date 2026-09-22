@@ -1,0 +1,22 @@
+---
+- name: Resolve package from dbahub
+  ansible.builtin.include_role:
+    name: wtferris.oracle.dbahub
+  vars:
+    dbahub_operation: package
+    dbahub_os: "{{ software_package.os | default((ansible_facts.system | default(ansible_system)) | lower) }}"
+    dbahub_arch: "{{ software_package.arch | default((ansible_facts.architecture | default(ansible_architecture)) | lower) }}"
+    dbahub_type: "{{ software_package.type | default('oracle-database') }}"
+    dbahub_release: "{{ software_package.release | default('latest') }}"
+    dbahub_package: "{{ software_package.package | default('latest.tar.gz') }}"
+
+- name: Publish dbahub package resolver contract
+  ansible.builtin.set_fact:
+    package_url: "{{ dbahub_result.url }}"
+    package_md5sum: "{{ dbahub_result.md5 }}"
+    software_resolved_package:
+      name: "{{ dbahub_result.item }}"
+      type: "{{ dbahub_result.type }}"
+      url: "{{ dbahub_result.url }}"
+      md5sum: "{{ dbahub_result.md5 }}"
+      metadata: "{{ dbahub_result }}"

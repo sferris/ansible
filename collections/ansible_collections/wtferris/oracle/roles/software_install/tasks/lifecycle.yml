@@ -1,0 +1,87 @@
+---
+- name: Run package installation transaction
+  block:
+    - name: Fetch desired software archive
+      wtferris.oracle.fetch_archive:
+        source_url: "{{ package_url }}"
+        installation_path: >-
+          {{ software_fetch_installation_path
+             if software_fetch_installation_path | length > 0
+             else software_installation_directory | dirname }}
+        md5sum: "{{ package_md5sum }}"
+        force: "{{ software_fetch_force }}"
+        lock_timeout: "{{ software_fetch_lock_timeout }}"
+      register: package
+
+    - name: Validate fetched software archive
+      ansible.builtin.assert:
+        that:
+          - not package.failed | default(true) | bool
+          - package.md5sum | default('') | lower == package_md5sum
+          - package.unpack_directory is defined
+          - package.unpack_directory | length > 0
+          - package.temporary_directory is defined
+          - package.contents is defined
+        fail_msg: fetch_archive returned an incomplete or mismatched package result.
+
+    - name: Inspect fetched unpack directory
+      ansible.builtin.stat:
+        path: "{{ package.unpack_directory }}"
+      register: software_unpack_directory_stat
+
+    - name: Validate fetched unpack directory exists
+      ansible.builtin.assert:
+        that:
+          - software_unpack_directory_stat.stat.exists | default(false) | bool
+          - software_unpack_directory_stat.stat.isdir | default(false) | bool
+        fail_msg: >-
+          fetch_archive unpack directory {{ package.unpack_directory }} does
+          not exist or is not a directory.
+
+    - name: Run package-specific installer
+      ansible.builtin.include_tasks: "{{ software_package.installer_tasks_file }}"
+
+    - name: Verify installed package
+      ansible.builtin.include_tasks: >-
+        {{ software_package.verifier_tasks_file | default('verifiers/default.yml', true) }}
+
+    - name: Commit software registration symlink
+      ansible.builtin.file:
+        src: "{{ software_installation_directory }}"
+        dest: "{{ software_registration_path }}"
+        state: link
+        force: false
+      register: software_registration_commit
+
+    - name: Return software installation result
+      ansible.builtin.set_fact:
+        software_package_installed: true
+        software_install_result:
+          changed: true
+          installed: true
+          package_name: "{{ software_package.name }}"
+          package_metadata: "{{ software_resolved_package }}"
+          md5sum: "{{ package.md5sum }}"
+          installation_directory: "{{ software_installation_directory }}"
+          registration_path: "{{ software_registration_path }}"
+          package: "{{ package }}"
+  always:
+    - name: Clean fetched software cache when explicitly enabled
+      ansible.builtin.file:
+        path: "{{ package.temporary_directory }}"
+        state: absent
+      register: software_cleanup_result
+      failed_when: false
+      when:
+        - software_cleanup_temporary_directory | bool
+        - package is defined
+        - package.temporary_directory is defined
+
+    - name: Report software cache cleanup failure
+      ansible.builtin.debug:
+        msg: >-
+          Cleanup of {{ package.temporary_directory }} failed after the package
+          lifecycle. The original lifecycle result has been preserved.
+      when:
+        - software_cleanup_result is defined
+        - software_cleanup_result.failed | default(false) | bool

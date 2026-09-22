@@ -1,0 +1,19 @@
+---
+- name: Validate installer-driven package inputs
+  ansible.builtin.assert:
+    that:
+      - software_package.installer_executable | default('') | length > 0
+      - software_package.verification_path | default('') | length > 0
+    fail_msg: >-
+      run_installer requires software_package.installer_executable relative to
+      package.unpack_directory and software_package.verification_path.
+
+- name: Run package installation program
+  ansible.builtin.command:
+    argv: >-
+      {{ [package.unpack_directory ~ '/' ~ software_package.installer_executable]
+         + (software_package.installer_arguments | default([])) }}
+  args:
+    chdir: "{{ package.unpack_directory }}"
+    creates: "{{ software_package.verification_path }}"
+  environment: "{{ software_package.installer_environment | default({}) }}"

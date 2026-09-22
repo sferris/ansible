@@ -1,0 +1,111 @@
+---
+- name: Validate software installation inputs
+  ansible.builtin.assert:
+    that:
+      - software_package.name | default('') | length > 0
+      - software_package.name is match('^[A-Za-z0-9_.-]+$')
+      - software_package.installation_directory | default('') | length > 0
+      - software_package.installer_tasks_file | default('') is match('^installers/[A-Za-z0-9_.-]+[.]yml$')
+      - software_package.verifier_tasks_file | default('verifiers/default.yml', true) is match('^verifiers/[A-Za-z0-9_.-]+[.]yml$')
+      - software_metadata_resolver_tasks_file is match('^resolvers/[A-Za-z0-9_.-]+[.]yml$')
+    fail_msg: >-
+      software_package requires a safe name, installation_directory, and a
+      role-relative installers/*.yml task file. Resolver and verifier files
+      must be role-relative resolvers/*.yml and verifiers/*.yml files.
+
+- name: Resolve desired package metadata
+  ansible.builtin.include_tasks: "{{ software_metadata_resolver_tasks_file }}"
+
+- name: Validate resolved package metadata
+  ansible.builtin.assert:
+    that:
+      - package_url | default('') | length > 0
+      - package_md5sum | default('') is match('^[0-9A-Fa-f]{32}$')
+      - software_resolved_package is mapping
+      - software_resolved_package.name | default('') | length > 0
+      - software_resolved_package.type | default('') | length > 0
+    fail_msg: >-
+      The metadata resolver must set package_url, a 32-character
+      package_md5sum, and software_resolved_package with name and type.
+
+- name: Normalize software transaction paths
+  ansible.builtin.set_fact:
+    package_md5sum: "{{ package_md5sum | lower }}"
+    software_installation_directory: "{{ software_package.installation_directory | regex_replace('/+$', '') }}"
+    software_registration_path: >-
+      {{ software_registration_directory | regex_replace('/+$', '')
+      }}/.{{ package_md5sum | lower }}-{{ software_package.name }}
+    software_install_lock_path: >-
+      {{ software_registration_directory | regex_replace('/+$', '')
+      }}/.{{ package_md5sum | lower }}-{{ software_package.name }}.lock
+    software_install_lock_acquired: false
+
+- name: Ensure software registration directory exists
+  ansible.builtin.file:
+    path: "{{ software_registration_directory }}"
+    state: directory
+    mode: "0700"
+
+- name: Inspect current software registration
+  ansible.builtin.include_tasks: inspect_registration.yml
+
+- name: Predict installation in check mode
+  ansible.builtin.set_fact:
+    software_install_result:
+      changed: true
+      installed: false
+      check_mode: true
+      package_name: "{{ software_package.name }}"
+      md5sum: "{{ package_md5sum }}"
+      installation_directory: "{{ software_installation_directory }}"
+      registration_path: "{{ software_registration_path }}"
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - not software_package_installed | bool
+
+- name: Snapshot whether software installation is required
+  ansible.builtin.set_fact:
+    software_installation_required: >-
+      {{ not ansible_check_mode and not software_package_installed | bool }}
+
+- name: Install software under transaction lock
+  when: software_installation_required | bool
+  block:
+    - name: Acquire atomic software installation lock
+      ansible.builtin.command:
+        argv:
+          - mkdir
+          - "{{ software_install_lock_path }}"
+      register: software_install_lock_command
+      changed_when: software_install_lock_command.rc == 0
+      failed_when: false
+      retries: "{{ software_install_lock_retries }}"
+      delay: "{{ software_install_lock_delay }}"
+      until: software_install_lock_command.rc == 0
+
+    - name: Confirm software installation lock was acquired
+      ansible.builtin.assert:
+        that:
+          - software_install_lock_command.rc == 0
+        fail_msg: >-
+          Timed out acquiring software installation lock
+          {{ software_install_lock_path }}. Remove it only after confirming no
+          installation process owns it.
+
+    - name: Record software installation lock ownership
+      ansible.builtin.set_fact:
+        software_install_lock_acquired: true
+
+    - name: Recheck registration after acquiring lock
+      ansible.builtin.include_tasks: inspect_registration.yml
+
+    - name: Execute software installation lifecycle
+      ansible.builtin.include_tasks: lifecycle.yml
+      when: not software_package_installed | bool
+  always:
+    - name: Release software installation lock
+      ansible.builtin.file:
+        path: "{{ software_install_lock_path }}"
+        state: absent
+      when: software_install_lock_acquired | default(false) | bool

@@ -1,0 +1,89 @@
+---
+- name: Inspect registration path without following links
+  ansible.builtin.stat:
+    path: "{{ software_registration_path }}"
+    follow: false
+  register: software_registration_lstat
+
+- name: Identify inconsistent registration object
+  ansible.builtin.set_fact:
+    software_registration_is_link: >-
+      {{ software_registration_lstat.stat.islnk | default(false) | bool }}
+    software_registration_target_matches: >-
+      {{ software_registration_lstat.stat.islnk | default(false) | bool and
+         software_registration_lstat.stat.lnk_source | default('') == software_installation_directory }}
+    software_registration_unexpected: >-
+      {{ software_registration_lstat.stat.exists | default(false) | bool and
+         (not software_registration_lstat.stat.islnk | default(false) | bool or
+          software_registration_lstat.stat.lnk_source | default('') != software_installation_directory) }}
+
+- name: Reject inconsistent registration object
+  ansible.builtin.assert:
+    that:
+      - not software_registration_unexpected | bool
+    fail_msg: >-
+      Registration path {{ software_registration_path }} exists but is not an
+      expected symlink to {{ software_installation_directory }}. Set
+      software_repair_invalid_registration=true to remove and repair it.
+  when: not software_repair_invalid_registration | bool
+
+- name: Remove inconsistent registration object when repair is enabled
+  ansible.builtin.file:
+    path: "{{ software_registration_path }}"
+    state: absent
+  when:
+    - software_repair_invalid_registration | bool
+    - software_registration_unexpected | bool
+
+- name: Reinspect repaired registration path
+  ansible.builtin.stat:
+    path: "{{ software_registration_path }}"
+    follow: false
+  register: software_registration_repaired_lstat
+  when:
+    - software_repair_invalid_registration | bool
+    - software_registration_unexpected | bool
+
+- name: Use repaired registration state
+  ansible.builtin.set_fact:
+    software_registration_lstat: "{{ software_registration_repaired_lstat }}"
+    software_registration_is_link: false
+    software_registration_target_matches: false
+  when:
+    - software_repair_invalid_registration | bool
+    - software_registration_unexpected | bool
+
+- name: Inspect registration target
+  ansible.builtin.stat:
+    path: "{{ software_registration_path }}"
+    follow: true
+  register: software_registration_target_stat
+  when:
+    - software_registration_is_link | bool
+    - software_registration_target_matches | bool
+
+- name: Determine registration candidate validity
+  ansible.builtin.set_fact:
+    software_registration_candidate: >-
+      {{ software_registration_is_link | bool and
+         software_registration_target_matches | bool and
+         software_registration_target_stat.stat.exists | default(false) | bool and
+         software_registration_target_stat.stat.isdir | default(false) | bool }}
+    software_package_installed: false
+
+- name: Verify existing registered installation
+  ansible.builtin.include_tasks: >-
+    {{ software_package.verifier_tasks_file | default('verifiers/default.yml', true) }}
+  when: software_registration_candidate | bool
+
+- name: Mark verified registered package installed
+  ansible.builtin.set_fact:
+    software_package_installed: true
+    software_install_result:
+      changed: false
+      installed: true
+      package_name: "{{ software_package.name }}"
+      md5sum: "{{ package_md5sum }}"
+      installation_directory: "{{ software_installation_directory }}"
+      registration_path: "{{ software_registration_path }}"
+  when: software_registration_candidate | bool

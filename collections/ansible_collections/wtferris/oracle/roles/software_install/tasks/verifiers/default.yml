@@ -1,0 +1,14 @@
+---
+- name: Inspect expected software installation directory
+  ansible.builtin.stat:
+    path: "{{ software_installation_directory }}"
+  register: software_default_verification
+
+- name: Verify expected software installation directory
+  ansible.builtin.assert:
+    that:
+      - software_default_verification.stat.exists | default(false) | bool
+      - software_default_verification.stat.isdir | default(false) | bool
+    fail_msg: >-
+      Expected installation directory {{ software_installation_directory }}
+      does not exist or is not a directory.
