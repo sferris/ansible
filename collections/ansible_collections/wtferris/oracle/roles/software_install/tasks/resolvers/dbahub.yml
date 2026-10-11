@@ -4,8 +4,8 @@
     name: wtferris.oracle.dbahub
   vars:
     dbahub_operation: package
-    dbahub_os: "{{ software_package.os | default((ansible_facts.system | default(ansible_system)) | lower) }}"
-    dbahub_arch: "{{ software_package.arch | default((ansible_facts.architecture | default(ansible_architecture)) | lower) }}"
+    dbahub_os: "{{ software_package.os | default(ansible_facts['system'] | lower) }}"
+    dbahub_arch: "{{ software_package.arch | default(ansible_facts['architecture'] | lower) }}"
     dbahub_type: "{{ software_package.type | default('oracle-database') }}"
     dbahub_release: "{{ software_package.release | default('latest') }}"
     dbahub_package: "{{ software_package.package | default('latest.tar.gz') }}"
