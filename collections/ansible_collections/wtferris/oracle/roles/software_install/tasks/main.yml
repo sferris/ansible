@@ -5,13 +5,18 @@
       - software_package.name | default('') | length > 0
       - software_package.name is match('^[A-Za-z0-9_.-]+$')
       - software_package.installation_directory | default('') | length > 0
-      - software_package.installer_tasks_file | default('') is match('^installers/[A-Za-z0-9_.-]+[.]yml$')
+      - >-
+        (software_installer_role | length > 0 and
+         software_installer_role is match('^[A-Za-z0-9_.-]+$') and
+         software_installer_tasks_from is match('^[A-Za-z0-9_.-]+$')) or
+        software_package.installer_tasks_file | default('') is match('^installers/[A-Za-z0-9_.-]+[.]yml$')
       - software_package.verifier_tasks_file | default('verifiers/default.yml', true) is match('^verifiers/[A-Za-z0-9_.-]+[.]yml$')
       - software_metadata_resolver_tasks_file is match('^resolvers/[A-Za-z0-9_.-]+[.]yml$')
     fail_msg: >-
-      software_package requires a safe name, installation_directory, and a
-      role-relative installers/*.yml task file. Resolver and verifier files
-      must be role-relative resolvers/*.yml and verifiers/*.yml files.
+      software_package requires a safe name, installation_directory, and an
+      installer role callback (preferred) or a role-relative
+      installers/*.yml task file. Resolver and verifier files must be
+      role-relative resolvers/*.yml and verifiers/*.yml files.
 
 - name: Resolve desired package metadata
   ansible.builtin.include_tasks: "{{ software_metadata_resolver_tasks_file }}"

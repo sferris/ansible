@@ -1,0 +1,3 @@
+---
+# Package resolution, installation paths, and dbahub access are configured with
+# the software_install role's software_package and dbahub_* variables.

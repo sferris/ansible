@@ -1,0 +1,49 @@
+---
+- name: Validate Oracle Database archive layout
+  ansible.builtin.assert:
+    that:
+      - package.contents | length == 1
+    fail_msg: >-
+      install_database requires an archive containing exactly one top-level
+      Oracle Database software directory.
+
+- name: Inspect extracted Oracle Database directory
+  ansible.builtin.stat:
+    path: "{{ package.unpack_directory }}/{{ package.contents | first }}"
+  register: oracle_database_publish_source
+
+- name: Validate extracted Oracle Database directory
+  ansible.builtin.assert:
+    that:
+      - oracle_database_publish_source.stat.exists | default(false) | bool
+      - oracle_database_publish_source.stat.isdir | default(false) | bool
+    fail_msg: >-
+      The Oracle Database archive's top-level entry must be a directory.
+
+- name: Ensure Oracle Database installation parent exists
+  ansible.builtin.file:
+    path: "{{ software_installation_directory | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Inspect Oracle Database installation directory
+  ansible.builtin.stat:
+    path: "{{ software_installation_directory }}"
+  register: oracle_database_publish_destination
+
+- name: Refuse to overwrite an unregistered Oracle Database installation
+  ansible.builtin.assert:
+    that:
+      - not oracle_database_publish_destination.stat.exists | default(false) | bool
+    fail_msg: >-
+      Oracle Database installation directory {{ software_installation_directory }}
+      already exists without a valid registration. Refusing to overwrite it.
+
+- name: Publish Oracle Database directory atomically
+  ansible.builtin.command:
+    argv:
+      - mv
+      - "{{ package.unpack_directory }}/{{ package.contents | first }}"
+      - "{{ software_installation_directory }}"
+  args:
+    creates: "{{ software_installation_directory }}"

@@ -117,7 +117,11 @@ from ansible_collections.wtferris.oracle.plugins.module_utils.fetch_archive impo
 
 ### `wtferris.oracle.software_install`
 
-Transactionally resolves package metadata, fetches an archive, invokes a role-local package installer, verifies the result, and commits an MD5-specific registration symlink. See [`roles/software_install/README.md`](roles/software_install/README.md) for extension contracts, examples, registration semantics, locking, cleanup, and testing.
+Transactionally resolves package metadata, fetches an archive, invokes a product-role installer callback, verifies the result, and commits an MD5-specific registration symlink. See [`roles/software_install/README.md`](roles/software_install/README.md) for extension contracts, examples, registration semantics, locking, cleanup, and testing.
+
+### `wtferris.oracle.install_database`
+
+Provides the Oracle Database product entry point and database-specific directory publication while delegating locking, fetching, verification, registration, and cleanup to `software_install`. See [`roles/install_database/README.md`](roles/install_database/README.md).
 
 ### `wtferris.oracle.dbahub`
 

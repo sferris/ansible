@@ -38,8 +38,15 @@
           fetch_archive unpack directory {{ package.unpack_directory }} does
           not exist or is not a directory.
 
-    - name: Run package-specific installer
+    - name: Run package-specific installer role callback
+      ansible.builtin.include_role:
+        name: "{{ software_installer_role }}"
+        tasks_from: "{{ software_installer_tasks_from }}"
+      when: software_installer_role | length > 0
+
+    - name: Run legacy role-local package installer
       ansible.builtin.include_tasks: "{{ software_package.installer_tasks_file }}"
+      when: software_installer_role | length == 0
 
     - name: Verify installed package
       ansible.builtin.include_tasks: >-

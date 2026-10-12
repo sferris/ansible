@@ -9,6 +9,12 @@ argument_specs:
       software_metadata_resolver_tasks_file:
         type: str
         default: resolvers/dbahub.yml
+      software_installer_role:
+        type: str
+        default: ""
+      software_installer_tasks_from:
+        type: str
+        default: install
       software_registration_directory:
         type: path
       software_cleanup_temporary_directory:

@@ -133,9 +133,9 @@
         that:
           - not software_install_result.changed
 
-    - name: Install changed MD5 as a distinct revision
+    - name: Install changed MD5 through the database product role
       ansible.builtin.include_role:
-        name: wtferris.oracle.software_install
+        name: wtferris.oracle.install_database
       vars:
         software_metadata_resolver_tasks_file: resolvers/fixture.yml
         software_fixture_package_metadata: "{{ test_metadata_v2 }}"
@@ -143,7 +143,6 @@
         software_package:
           name: fixture
           installation_directory: "{{ test_root }}/install-v2"
-          installer_tasks_file: installers/publish_directory.yml
 
     - name: Verify changed MD5 registration exists
       ansible.builtin.stat:
@@ -162,9 +161,9 @@
         path: "{{ test_root }}/install-v2"
         state: absent
 
-    - name: Reinstall a broken expected registration
+    - name: Reinstall a broken expected registration through the database product role
       ansible.builtin.include_role:
-        name: wtferris.oracle.software_install
+        name: wtferris.oracle.install_database
       vars:
         software_metadata_resolver_tasks_file: resolvers/fixture.yml
         software_fixture_package_metadata: "{{ test_metadata_v2 }}"
@@ -172,7 +171,6 @@
         software_package:
           name: fixture
           installation_directory: "{{ test_root }}/install-v2"
-          installer_tasks_file: installers/publish_directory.yml
 
     - name: Verify broken registration target was restored
       ansible.builtin.stat:

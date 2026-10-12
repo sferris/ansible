@@ -1,0 +1,7 @@
+---
+- name: Install Oracle Database through the transactional software lifecycle
+  ansible.builtin.include_role:
+    name: wtferris.oracle.software_install
+  vars:
+    software_installer_role: wtferris.oracle.install_database
+    software_installer_tasks_from: install

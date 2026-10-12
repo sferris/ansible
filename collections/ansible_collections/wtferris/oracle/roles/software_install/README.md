@@ -10,7 +10,7 @@ Transactionally resolve, fetch, install, verify, and register archive-based soft
 4. Acquire an atomic installation lock.
 5. Recheck registration after acquiring the lock.
 6. Call `wtferris.oracle.fetch_archive` when installation is still required.
-7. Include the package-specific installer.
+7. Invoke the product role's package-specific installer callback.
 8. Include the package-specific verifier, or perform default directory verification.
 9. Create the registration symlink as the final commit point.
 10. Optionally remove the fetched cache.
@@ -23,10 +23,11 @@ Registration is never a handler or an `always` task.
 software_package:
   name: oracle_client                         # required, safe filename component
   installation_directory: /u01/oracle/client # required
-  installer_tasks_file: installers/oracle_client.yml # required, role-relative
-  verifier_tasks_file: verifiers/oracle_client.yml   # optional, role-relative
+  verifier_tasks_file: verifiers/default.yml         # optional, role-relative
 
 software_metadata_resolver_tasks_file: resolvers/dbahub.yml
+software_installer_role: wtferris.oracle.install_database
+software_installer_tasks_from: install
 software_registration_directory: "{{ ansible_user_dir }}/.packages"
 software_cleanup_temporary_directory: true
 software_repair_invalid_registration: false
@@ -70,9 +71,18 @@ Configure `dbahub_url`, authentication, and TLS variables as documented by the d
 
 `resolvers/fixture.yml` consumes `software_fixture_package_metadata` and is intended for offline tests or caller-provided metadata.
 
-## Installer contract
+## Installer callback contract
 
-Installer files must live under `tasks/installers/`. They receive:
+The preferred extension point is a product role callback:
+
+```yaml
+software_installer_role: wtferris.oracle.install_database
+software_installer_tasks_from: install
+```
+
+The lifecycle invokes that role entry point after fetching and validating the archive and while holding the installation lock. This lets a product role own preparation and installation without splitting transaction ownership across separate pre/post calls.
+
+Callbacks receive:
 
 - `software_package`: caller configuration.
 - `software_resolved_package`: complete resolver metadata.
@@ -86,9 +96,15 @@ package.unpack_directory
 package.contents
 ```
 
-Installers own only installation. They must not create or modify the registration link. They must be safely rerunnable and should validate meaningful artifacts rather than treating an empty directory as success.
+Callbacks own only product installation. They must not create or modify the registration link. They must be safely rerunnable and should validate meaningful artifacts rather than treating an empty directory as success. Verification, registration, cleanup, and lock release remain lifecycle responsibilities.
 
-### Directory publication example
+For compatibility, when `software_installer_role` is empty, `software_package.installer_tasks_file` may still select a role-local `installers/*.yml` implementation.
+
+### Oracle Database product role
+
+`wtferris.oracle.install_database` is the reference callback implementation. Its outer `main` task invokes `software_install`, which calls back into `install_database` with `tasks_from: install` while the transaction is active. The callback requires one top-level extracted directory and publishes it atomically without touching registration.
+
+### Legacy directory publication example
 
 ```yaml
 software_package:
@@ -177,13 +193,12 @@ The role does not set `become`. The caller must provide privileges needed to wri
 - hosts: database_servers
   become: true
   roles:
-    - role: wtferris.oracle.software_install
+    - role: wtferris.oracle.install_database
       vars:
         dbahub_url: https://dbahub.example.com
         software_package:
           name: oracle_database
           installation_directory: /u01/product/oracle/19.26/db
-          installer_tasks_file: installers/publish_directory.yml
           verifier_tasks_file: verifiers/executable.yml
           verification_executable: /u01/product/oracle/19.26/db/bin/oracle
           type: oracle-database
@@ -193,9 +208,10 @@ The role does not set `become`. The caller must provide privileges needed to wri
 
 ## Contributor guide
 
-To add package support:
+To add product support:
 
-1. Add a safely rerunnable task file beneath `tasks/installers/`.
-2. Optionally add a read-only verifier beneath `tasks/verifiers/`.
-3. Add a resolver only when the existing dbahub contract is insufficient.
-4. Never create registration links from package-specific tasks; the central transaction always owns verification and registration.
+1. Add a product role whose `main` entry point invokes `software_install` with itself as `software_installer_role`.
+2. Add a safely rerunnable callback entry point such as `tasks/install.yml` to that product role.
+3. Optionally add a read-only verifier beneath `software_install/tasks/verifiers/`.
+4. Add a resolver only when the existing dbahub contract is insufficient.
+5. Never create registration links from product-specific tasks; the central transaction always owns verification and registration.
