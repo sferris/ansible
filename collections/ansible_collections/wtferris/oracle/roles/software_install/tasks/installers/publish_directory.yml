@@ -46,21 +46,31 @@
       Installation directory {{ software_installation_directory }} already
       exists without a valid registration. Refusing to overwrite it.
 
-- name: Build candidate from shared archive cache
-  ansible.builtin.command:
-    argv:
-      - cp
-      - -a
-      - "{{ package.unpack_directory }}/{{ package.contents | first }}"
-      - "{{ software_publish_candidate }}"
-  args:
-    creates: "{{ software_publish_candidate }}"
-
 - name: Publish candidate atomically on the same filesystem
   ansible.builtin.command:
     argv:
       - mv
-      - "{{ software_publish_candidate }}"
+      - "{{ package.unpack_directory }}/{{ package.contents | first }}"
       - "{{ software_installation_directory }}"
   args:
     creates: "{{ software_installation_directory }}"
+
+#"msg": "build: cp -a /u01/product/oracle/fetch-archive-md5-9b8ce4e47701204dcd26632d266aa19e/extract/linux-x64-19.8.0.0.200714-db /u01/product/oracle/linux-x64-19.8.0.0.200714-db.candidate-9b8ce4e47701204dcd26632d266aa19e"
+#"msg": "publish: mv /u01/product/oracle/linux-x64-19.8.0.0.200714-db.candidate-9b8ce4e47701204dcd26632d266aa19e /u01/product/oracle/linux-x64-19.8.0.0.200714-db"
+
+# - name: Build candidate from shared archive cache
+#   ansible.builtin.command:
+#     argv:
+#       - cp
+#       - -a
+#       - "{{ package.unpack_directory }}/{{ package.contents | first }}"
+#       - "{{ software_publish_candidate }}"
+#   args:
+#     creates: "{{ software_publish_candidate }}"
+
+# - name: Publish candidate atomically on the same filesystem
+#   ansible.builtin.command:
+#     argv:
+#       - mv
+#       - "{{ software_publish_candidate }}"
+#       - "{{ software_installation_directory }}"

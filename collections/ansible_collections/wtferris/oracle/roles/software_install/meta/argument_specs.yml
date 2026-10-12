@@ -13,7 +13,7 @@ argument_specs:
         type: path
       software_cleanup_temporary_directory:
         type: bool
-        default: false
+        default: true
       software_repair_invalid_registration:
         type: bool
         default: false

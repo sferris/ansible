@@ -28,7 +28,7 @@ software_package:
 
 software_metadata_resolver_tasks_file: resolvers/dbahub.yml
 software_registration_directory: "{{ ansible_user_dir }}/.packages"
-software_cleanup_temporary_directory: false
+software_cleanup_temporary_directory: true
 software_repair_invalid_registration: false
 software_fetch_installation_path: ""         # defaults to installation parent
 software_fetch_force: false
@@ -97,7 +97,7 @@ software_package:
   installer_tasks_file: installers/publish_directory.yml
 ```
 
-`publish_directory.yml` requires one top-level extracted directory. It preserves the shared fetch cache, copies into a candidate beside the destination, and atomically renames the candidate into place.
+`publish_directory.yml` requires one top-level extracted directory and atomically renames the candidate into place.
 
 ### Installer-program example
 
@@ -153,7 +153,9 @@ A changed MD5 creates a distinct registration transaction. Package-specific inst
 
 Installer or verifier failure prevents registration. Errors are not ignored.
 
-`fetch_archive` returns a deterministic shared cache, so cleanup defaults to `false`. Set `software_cleanup_temporary_directory: true` only when no other process needs that cache. Cleanup runs from an `always` section and cannot mask the original lifecycle failure; a cleanup problem is reported separately.
+Cleanup defaults to `true` and runs from an `always` section after success or failure without masking the original lifecycle failure. Set `software_cleanup_temporary_directory: false` when the deterministic `fetch_archive` cache must be retained or another process still needs it.
+
+Cleanup is deliberately conservative. It proceeds only when `.complete` is a regular file and `package.unpack_directory` is exactly `<package.temporary_directory>/extract` with the literal basename `extract`. The role recursively removes only that `extract` directory, removes `.complete`, and then uses `rmdir` on the cache directory. Any unexpected remaining content prevents removal of the parent and is reported for manual inspection.
 
 ## Concurrency
 

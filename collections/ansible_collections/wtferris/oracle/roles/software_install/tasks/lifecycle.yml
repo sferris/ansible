@@ -66,22 +66,86 @@
           registration_path: "{{ software_registration_path }}"
           package: "{{ package }}"
   always:
-    - name: Clean fetched software cache when explicitly enabled
-      ansible.builtin.file:
-        path: "{{ package.temporary_directory }}"
-        state: absent
-      register: software_cleanup_result
+    - name: Inspect fetched software cache completion marker
+      ansible.builtin.stat:
+        path: "{{ package.temporary_directory }}/.complete"
+        follow: false
+      register: software_cleanup_marker
       failed_when: false
       when:
         - software_cleanup_temporary_directory | bool
         - package is defined
         - package.temporary_directory is defined
+        - package.temporary_directory | length > 0
+
+    - name: Validate fetched software cache cleanup paths
+      ansible.builtin.assert:
+        that:
+          - package.unpack_directory is defined
+          - package.unpack_directory | length > 0
+          - package.unpack_directory == package.temporary_directory ~ '/extract'
+          - package.unpack_directory | basename == 'extract'
+          - software_cleanup_marker.stat.exists | default(false) | bool
+          - software_cleanup_marker.stat.isreg | default(false) | bool
+        fail_msg: >-
+          Refusing cache cleanup because the paths do not match the expected
+          temporary_directory/extract layout or .complete is not a regular file.
+      register: software_cleanup_validation
+      failed_when: false
+      when:
+        - software_cleanup_temporary_directory | bool
+        - package is defined
+        - package.temporary_directory is defined
+        - package.temporary_directory | length > 0
+        - software_cleanup_marker is defined
+        - not software_cleanup_marker.skipped | default(false) | bool
+
+    - name: Remove fetched software extract directory
+      ansible.builtin.file:
+        path: "{{ package.unpack_directory }}"
+        state: absent
+      register: software_cleanup_extract
+      failed_when: false
+      when:
+        - software_cleanup_validation is defined
+        - not software_cleanup_validation.failed | default(true) | bool
+
+    - name: Remove fetched software completion marker
+      ansible.builtin.file:
+        path: "{{ package.temporary_directory }}/.complete"
+        state: absent
+      register: software_cleanup_complete
+      failed_when: false
+      when:
+        - software_cleanup_extract is defined
+        - not software_cleanup_extract.failed | default(true) | bool
+
+    - name: Remove empty fetched software cache directory
+      ansible.builtin.command:
+        argv:
+          - rmdir
+          - "{{ package.temporary_directory }}"
+      register: software_cleanup_directory
+      changed_when: software_cleanup_directory.rc == 0
+      failed_when: false
+      when:
+        - software_cleanup_complete is defined
+        - not software_cleanup_complete.failed | default(true) | bool
 
     - name: Report software cache cleanup failure
       ansible.builtin.debug:
         msg: >-
-          Cleanup of {{ package.temporary_directory }} failed after the package
-          lifecycle. The original lifecycle result has been preserved.
+          Cleanup of {{ package.temporary_directory | default('the fetched cache') }}
+          was refused or incomplete. The original lifecycle result has been
+          preserved; inspect the cache before removing it manually.
       when:
-        - software_cleanup_result is defined
-        - software_cleanup_result.failed | default(false) | bool
+        - software_cleanup_temporary_directory | bool
+        - >-
+          (software_cleanup_validation is defined and
+           software_cleanup_validation.failed | default(false) | bool) or
+          (software_cleanup_extract is defined and
+           software_cleanup_extract.failed | default(false) | bool) or
+          (software_cleanup_complete is defined and
+           software_cleanup_complete.failed | default(false) | bool) or
+          (software_cleanup_directory is defined and
+           software_cleanup_directory.rc | default(0) != 0)
